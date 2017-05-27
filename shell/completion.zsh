@@ -163,7 +163,7 @@ _fzf_complete_unalias() {
 }
 
 fzf-completion() {
-  local tokens cmd prefix trigger_general trigger_fasd_paths trigger_fasd_dirs triggers current_trigger tail fzf matches lbuf d_cmds
+  local tokens cmd prefix trigger_general trigger_fasd_paths trigger_fasd_dirs triggers current_trigger tail reversed_head fzf matches lbuf d_cmds
   setopt localoptions noshwordsplit noksh_arrays noposixbuiltins
 
   # http://zsh.sourceforge.net/FAQ/zshfaq03.html
@@ -185,6 +185,8 @@ fzf-completion() {
   [ -z "$trigger_general" -a ${LBUFFER[-1]} = ' ' ] && tokens+=("")
 
   tail=${LBUFFER:$(( ${#LBUFFER} - ${#trigger_general} ))}
+  reversed_head=$(echo ${tokens[-1]:0:${#trigger_general}} | rev)
+
   # Kill completion (do not require trigger sequence)
   if [ $cmd = kill -a ${LBUFFER[-1]} = ' ' ]; then
     fzf="$(__fzfcmd_complete)"
@@ -195,13 +197,18 @@ fzf-completion() {
     zle redisplay
     typeset -f zle-line-init >/dev/null && zle zle-line-init
   # Trigger sequence given
-  elif [ ${#tokens} -gt 1 ] && (( ${triggers[(I)${tail}]} )); then
-    current_trigger="$tail"
+  elif [ ${#tokens} -gt 1 ] && ( (( ${triggers[(I)${tail}]} )) || (( ${triggers[(I)${reversed_head}]} )) ); then
+    if (( ${triggers[(I)${tail}]} )); then
+      current_trigger="$tail"
+      prefix=${tokens[-1]:0:-${#current_trigger}}
+    else
+      current_trigger="$reversed_head"
+      prefix=${tokens[-1]:${#current_trigger}}
+    fi
 
     d_cmds=(${=FZF_COMPLETION_DIR_COMMANDS:-cd pushd rmdir})
 
-    [ -z "$current_trigger" ] && prefix=${tokens[-1]} || prefix=${tokens[-1]:0:-${#current_trigger}}
-    [ -z "${tokens[-1]}"    ] && lbuf=$LBUFFER        || lbuf=${LBUFFER:0:-${#tokens[-1]}}
+    [ -z "${tokens[-1]}" ] && lbuf=$LBUFFER || lbuf=${LBUFFER:0:-${#tokens[-1]}}
 
     if [ "$current_trigger" = "$trigger_general" ]; then
       if eval "type _fzf_complete_${cmd} > /dev/null"; then

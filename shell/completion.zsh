@@ -13,7 +13,6 @@
 # To use custom commands instead of find, override _fzf_compgen_{path,dir}
 if ! declare -f _fzf_compgen_path > /dev/null; then
   _fzf_compgen_path() {
-    echo "$1"
     command find -L "$1" \
       -name .git -prune -o -name .svn -prune -o \( -type d -o -type f -o -type l \) \
       -a -not -path "$1" -print 2> /dev/null | sed 's@^\./@@'
@@ -25,6 +24,18 @@ if ! declare -f _fzf_compgen_dir > /dev/null; then
     command find -L "$1" \
       -name .git -prune -o -name .svn -prune -o -type d \
       -a -not -path "$1" -print 2> /dev/null | sed 's@^\./@@'
+  }
+fi
+
+if ! declare -f _fzf_compgen_fasd_path > /dev/null; then
+  _fzf_compgen_fasd_path() {
+    command fasd -Ral | sed "s%^${PWD}/%%"
+  }
+fi
+
+if ! declare -f _fzf_compgen_fasd_dir > /dev/null; then
+  _fzf_compgen_fasd_dir() {
+    command fasd -Rdl | sed "s%^${PWD}/%%"
   }
 fi
 
@@ -78,6 +89,16 @@ _fzf_path_completion() {
 
 _fzf_dir_completion() {
   __fzf_generic_path_completion "$1" "$2" _fzf_compgen_dir \
+    "" "/" ""
+}
+
+_fzf_fasd_path_completion() {
+  __fzf_generic_path_completion "$1" "$2" _fzf_compgen_fasd_path \
+    "-m" "" " "
+}
+
+_fzf_fasd_dir_completion() {
+  __fzf_generic_path_completion "$1" "$2" _fzf_compgen_fasd_dir \
     "" "/" ""
 }
 
@@ -142,7 +163,7 @@ _fzf_complete_unalias() {
 }
 
 fzf-completion() {
-  local tokens cmd prefix trigger tail fzf matches lbuf d_cmds
+  local tokens cmd prefix trigger_general trigger_fasd_paths trigger_fasd_dirs triggers current_trigger tail fzf matches lbuf d_cmds
   setopt localoptions noshwordsplit noksh_arrays noposixbuiltins
 
   # http://zsh.sourceforge.net/FAQ/zshfaq03.html
@@ -156,10 +177,14 @@ fzf-completion() {
   cmd=${tokens[1]}
 
   # Explicitly allow for empty trigger.
-  trigger=${FZF_COMPLETION_TRIGGER-'**'}
-  [ -z "$trigger" -a ${LBUFFER[-1]} = ' ' ] && tokens+=("")
+  # Important: all triggers must have the same character length!
+  trigger_general=${FZF_COMPLETION_TRIGGER-'**'}
+  trigger_fasd_paths=${FZF_COMPLETION_FASD_FILES_TRIGGER-',f'}
+  trigger_fasd_dirs=${FZF_COMPLETION_FASD_DIRS_TRIGGER-',d'}
+  triggers=($trigger_general $trigger_fasd_paths $trigger_fasd_dirs)
+  [ -z "$trigger_general" -a ${LBUFFER[-1]} = ' ' ] && tokens+=("")
 
-  tail=${LBUFFER:$(( ${#LBUFFER} - ${#trigger} ))}
+  tail=${LBUFFER:$(( ${#LBUFFER} - ${#trigger_general} ))}
   # Kill completion (do not require trigger sequence)
   if [ $cmd = kill -a ${LBUFFER[-1]} = ' ' ]; then
     fzf="$(__fzfcmd_complete)"
@@ -170,18 +195,27 @@ fzf-completion() {
     zle redisplay
     typeset -f zle-line-init >/dev/null && zle zle-line-init
   # Trigger sequence given
-  elif [ ${#tokens} -gt 1 -a "$tail" = "$trigger" ]; then
+  elif [ ${#tokens} -gt 1 ] && (( ${triggers[(I)${tail}]} )); then
+    current_trigger="$tail"
+
     d_cmds=(${=FZF_COMPLETION_DIR_COMMANDS:-cd pushd rmdir})
 
-    [ -z "$trigger"      ] && prefix=${tokens[-1]} || prefix=${tokens[-1]:0:-${#trigger}}
-    [ -z "${tokens[-1]}" ] && lbuf=$LBUFFER        || lbuf=${LBUFFER:0:-${#tokens[-1]}}
+    [ -z "$current_trigger" ] && prefix=${tokens[-1]} || prefix=${tokens[-1]:0:-${#current_trigger}}
+    [ -z "${tokens[-1]}"    ] && lbuf=$LBUFFER        || lbuf=${LBUFFER:0:-${#tokens[-1]}}
 
-    if eval "type _fzf_complete_${cmd} > /dev/null"; then
-      eval "prefix=\"$prefix\" _fzf_complete_${cmd} \"$lbuf\""
-    elif [ ${d_cmds[(i)$cmd]} -le ${#d_cmds} ]; then
-      _fzf_dir_completion "$prefix" "$lbuf"
+    if [ "$current_trigger" = "$trigger_general" ]; then
+      if eval "type _fzf_complete_${cmd} > /dev/null"; then
+        eval "prefix=\"$prefix\" _fzf_complete_${cmd} \"$lbuf\""
+      elif [ ${d_cmds[(i)$cmd]} -le ${#d_cmds} ]; then
+        _fzf_dir_completion "$prefix" "$lbuf"
+      else
+        _fzf_path_completion "$prefix" "$lbuf"
+      fi
+    # fasd completion
+    elif [ "$current_trigger" = "$trigger_fasd_paths" ]; then
+      _fzf_fasd_path_completion "$prefix" "$lbuf"
     else
-      _fzf_path_completion "$prefix" "$lbuf"
+      _fzf_fasd_dir_completion "$prefix" "$lbuf"
     fi
   # Fall back to default completion
   else

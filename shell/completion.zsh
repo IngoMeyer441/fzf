@@ -33,6 +33,12 @@ if ! declare -f _fzf_compgen_fasd_path > /dev/null; then
   }
 fi
 
+if ! declare -f _fzf_compgen_fasd_file > /dev/null; then
+  _fzf_compgen_fasd_file() {
+    command fasd -Rfl | sed "s%^${PWD}/%%"
+  }
+fi
+
 if ! declare -f _fzf_compgen_fasd_dir > /dev/null; then
   _fzf_compgen_fasd_dir() {
     command fasd -Rdl | sed "s%^${PWD}/%%"
@@ -94,6 +100,11 @@ _fzf_dir_completion() {
 
 _fzf_fasd_path_completion() {
   __fzf_generic_path_completion "$1" "$2" _fzf_compgen_fasd_path \
+    "-m" "" " "
+}
+
+_fzf_fasd_file_completion() {
+  __fzf_generic_path_completion "$1" "$2" _fzf_compgen_fasd_file \
     "-m" "" " "
 }
 
@@ -163,7 +174,7 @@ _fzf_complete_unalias() {
 }
 
 fzf-completion() {
-  local tokens cmd prefix trigger_general trigger_fasd_paths trigger_fasd_dirs triggers current_trigger tail reversed_head fzf matches lbuf d_cmds
+  local tokens cmd prefix trigger_general trigger_fasd_paths trigger_fasd_files trigger_fasd_dirs triggers current_trigger tail reversed_head fzf matches lbuf d_cmds
   setopt localoptions noshwordsplit noksh_arrays noposixbuiltins
 
   # http://zsh.sourceforge.net/FAQ/zshfaq03.html
@@ -179,9 +190,10 @@ fzf-completion() {
   # Explicitly allow for empty trigger.
   # Important: all triggers must have the same character length!
   trigger_general=${FZF_COMPLETION_TRIGGER-'**'}
-  trigger_fasd_paths=${FZF_COMPLETION_FASD_FILES_TRIGGER-',f'}
+  trigger_fasd_paths=${FZF_COMPLETION_FASD_PATHS_TRIGGER-',,'}
+  trigger_fasd_files=${FZF_COMPLETION_FASD_FILES_TRIGGER-',f'}
   trigger_fasd_dirs=${FZF_COMPLETION_FASD_DIRS_TRIGGER-',d'}
-  triggers=($trigger_general $trigger_fasd_paths $trigger_fasd_dirs)
+  triggers=($trigger_general $trigger_fasd_paths $trigger_fasd_files $trigger_fasd_dirs)
   [ -z "$trigger_general" -a ${LBUFFER[-1]} = ' ' ] && tokens+=("")
 
   tail=${LBUFFER:$(( ${#LBUFFER} - ${#trigger_general} ))}
@@ -221,6 +233,8 @@ fzf-completion() {
     # fasd completion
     elif [ "$current_trigger" = "$trigger_fasd_paths" ]; then
       _fzf_fasd_path_completion "$prefix" "$lbuf"
+    elif [ "$current_trigger" = "$trigger_fasd_files" ]; then
+      _fzf_fasd_file_completion "$prefix" "$lbuf"
     else
       _fzf_fasd_dir_completion "$prefix" "$lbuf"
     fi

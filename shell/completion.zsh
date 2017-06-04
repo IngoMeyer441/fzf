@@ -100,17 +100,17 @@ _fzf_dir_completion() {
 
 _fzf_fasd_path_completion() {
   __fzf_generic_path_completion "$1" "$2" _fzf_compgen_fasd_path \
-    "-m" "" " "
+    "-m --tiebreak=end,index" "" " "
 }
 
 _fzf_fasd_file_completion() {
   __fzf_generic_path_completion "$1" "$2" _fzf_compgen_fasd_file \
-    "-m" "" " "
+    "-m --tiebreak=end,index" "" " "
 }
 
 _fzf_fasd_dir_completion() {
   __fzf_generic_path_completion "$1" "$2" _fzf_compgen_fasd_dir \
-    "" "/" ""
+    "--tiebreak=end,index" "/" ""
 }
 
 _fzf_feed_fifo() (

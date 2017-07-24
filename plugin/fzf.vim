@@ -149,13 +149,8 @@ function! s:tmux_enabled()
 endfunction
 
 function! s:escape(path)
-  let escaped_chars = '$%#''"'
-
-  if has('unix')
-    let escaped_chars .= ' \'
-  endif
-
-  return escape(a:path, escaped_chars)
+  let path = fnameescape(a:path)
+  return s:is_win ? escape(path, '$') : path
 endfunction
 
 " Upgrade legacy options
@@ -693,7 +688,7 @@ function! s:execute_term(dict, command, temps) abort
       lcd -
     endif
   endtry
-  setlocal nospell bufhidden=wipe nobuflisted
+  setlocal nospell bufhidden=wipe nobuflisted nonumber
   setf fzf
   startinsert
   return []

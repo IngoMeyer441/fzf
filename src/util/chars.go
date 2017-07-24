@@ -6,6 +6,11 @@ import (
 	"unsafe"
 )
 
+const (
+	overflow64 uint64 = 0x8080808080808080
+	overflow32 uint32 = 0x80808080
+)
+
 type Chars struct {
 	slice           []byte // or []rune
 	inBytes         bool
@@ -17,32 +22,41 @@ type Chars struct {
 	Index int32
 }
 
-// ToChars converts byte array into rune array
-func ToChars(bytes []byte) Chars {
-	var runes []rune
-	inBytes := true
-	numBytes := len(bytes)
-	for i := 0; i < numBytes; {
-		if bytes[i] < utf8.RuneSelf {
-			if !inBytes {
-				runes = append(runes, rune(bytes[i]))
-			}
-			i++
-		} else {
-			if inBytes {
-				inBytes = false
-				runes = make([]rune, i, numBytes)
-				for j := 0; j < i; j++ {
-					runes[j] = rune(bytes[j])
-				}
-			}
-			r, sz := utf8.DecodeRune(bytes[i:])
-			i += sz
-			runes = append(runes, r)
+func checkAscii(bytes []byte) (bool, int) {
+	i := 0
+	for ; i < len(bytes)-8; i += 8 {
+		if (overflow64 & *(*uint64)(unsafe.Pointer(&bytes[i]))) > 0 {
+			return false, i
 		}
 	}
+	for ; i < len(bytes)-4; i += 4 {
+		if (overflow32 & *(*uint32)(unsafe.Pointer(&bytes[i]))) > 0 {
+			return false, i
+		}
+	}
+	for ; i < len(bytes); i++ {
+		if bytes[i] >= utf8.RuneSelf {
+			return false, i
+		}
+	}
+	return true, 0
+}
+
+// ToChars converts byte array into rune array
+func ToChars(bytes []byte) Chars {
+	inBytes, bytesUntil := checkAscii(bytes)
 	if inBytes {
 		return Chars{slice: bytes, inBytes: inBytes}
+	}
+
+	runes := make([]rune, bytesUntil, len(bytes))
+	for i := 0; i < bytesUntil; i++ {
+		runes[i] = rune(bytes[i])
+	}
+	for i := bytesUntil; i < len(bytes); {
+		r, sz := utf8.DecodeRune(bytes[i:])
+		i += sz
+		runes = append(runes, r)
 	}
 	return RunesToChars(runes)
 }
@@ -142,47 +156,4 @@ func (chars *Chars) CopyRunes(dest []rune) {
 		dest[idx] = rune(b)
 	}
 	return
-}
-
-func (chars *Chars) Slice(b int, e int) Chars {
-	if runes := chars.optionalRunes(); runes != nil {
-		return RunesToChars(runes[b:e])
-	}
-	return Chars{slice: chars.slice[b:e], inBytes: true}
-}
-
-func (chars *Chars) Split(delimiter string) []Chars {
-	delim := []rune(delimiter)
-	numChars := chars.Length()
-	numDelim := len(delim)
-	begin := 0
-	ret := make([]Chars, 0, 1)
-
-	for index := 0; index < numChars; {
-		if index+numDelim <= numChars {
-			match := true
-			for off, d := range delim {
-				if chars.Get(index+off) != d {
-					match = false
-					break
-				}
-			}
-			// Found the delimiter
-			if match {
-				incr := Max(numDelim, 1)
-				ret = append(ret, chars.Slice(begin, index+incr))
-				index += incr
-				begin = index
-				continue
-			}
-		} else {
-			// Impossible to find the delimiter in the remaining substring
-			break
-		}
-		index++
-	}
-	if begin < numChars || len(ret) == 0 {
-		ret = append(ret, chars.Slice(begin, numChars))
-	}
-	return ret
 }

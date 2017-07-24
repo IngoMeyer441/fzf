@@ -87,6 +87,7 @@ type Terminal struct {
 	margin     [4]sizeSpec
 	strong     tui.Attr
 	bordered   bool
+	cleanExit  bool
 	border     tui.Window
 	window     tui.Window
 	pborder    tui.Window
@@ -366,6 +367,7 @@ func NewTerminal(opts *Options, eventBox *util.EventBox) *Terminal {
 		history:    opts.History,
 		margin:     opts.Margin,
 		bordered:   opts.Bordered,
+		cleanExit:  opts.ClearOnExit,
 		strong:     strongAttr,
 		cycle:      opts.Cycle,
 		header:     header,
@@ -710,11 +712,11 @@ func (t *Terminal) printHeader() {
 		trimmed, colors, newState := extractColor(lineStr, state, nil)
 		state = newState
 		item := &Item{
-			text:   util.RunesToChars([]rune(trimmed)),
+			text:   util.ToChars([]byte(trimmed)),
 			colors: colors}
 
 		t.move(line, 2, true)
-		t.printHighlighted(&Result{item: item},
+		t.printHighlighted(Result{item: item},
 			tui.AttrRegular, tui.ColHeader, tui.ColDefault, false, false)
 	}
 }
@@ -742,7 +744,7 @@ func (t *Terminal) printList() {
 	}
 }
 
-func (t *Terminal) printItem(result *Result, line int, i int, current bool) {
+func (t *Terminal) printItem(result Result, line int, i int, current bool) {
 	item := result.item
 	_, selected := t.selected[item.Index()]
 	label := " "
@@ -758,7 +760,7 @@ func (t *Terminal) printItem(result *Result, line int, i int, current bool) {
 
 	// Avoid unnecessary redraw
 	newLine := itemLine{current: current, selected: selected, label: label,
-		result: *result, queryLen: len(t.input), width: 0}
+		result: result, queryLen: len(t.input), width: 0}
 	prevLine := t.prevLines[i]
 	if prevLine.current == newLine.current &&
 		prevLine.selected == newLine.selected &&
@@ -840,7 +842,7 @@ func (t *Terminal) overflow(runes []rune, max int) bool {
 	return t.displayWidthWithLimit(runes, 0, max) > max
 }
 
-func (t *Terminal) printHighlighted(result *Result, attr tui.Attr, col1 tui.ColorPair, col2 tui.ColorPair, current bool, match bool) int {
+func (t *Terminal) printHighlighted(result Result, attr tui.Attr, col1 tui.ColorPair, col2 tui.ColorPair, current bool, match bool) int {
 	item := result.item
 
 	// Overflow
@@ -960,6 +962,7 @@ func (t *Terminal) printPreview() {
 	}
 	reader := bufio.NewReader(strings.NewReader(t.previewer.text))
 	lineNo := -t.previewer.offset
+	height := t.pwindow.Height()
 	var ansi *ansiState
 	for {
 		line, err := reader.ReadString('\n')
@@ -968,7 +971,8 @@ func (t *Terminal) printPreview() {
 			line = line[:len(line)-1]
 		}
 		lineNo++
-		if lineNo > t.pwindow.Height() {
+		if lineNo > height ||
+			t.pwindow.Y() == height-1 && t.pwindow.X() > 0 {
 			break
 		} else if lineNo > 0 {
 			var fillRet tui.FillReturn
@@ -998,7 +1002,7 @@ func (t *Terminal) printPreview() {
 		}
 	}
 	t.pwindow.FinishFill()
-	if t.previewer.lines > t.pwindow.Height() {
+	if t.previewer.lines > height {
 		offset := fmt.Sprintf("%d/%d", t.previewer.offset+1, t.previewer.lines)
 		pos := t.pwindow.Width() - len(offset)
 		if t.tui.DoesAutoWrap() {
@@ -1169,8 +1173,7 @@ func replacePlaceholder(template string, stripAnsi bool, delimiter Delimiter, fo
 		}
 
 		for idx, item := range items {
-			chars := util.RunesToChars([]rune(item.AsString(stripAnsi)))
-			tokens := Tokenize(chars, delimiter)
+			tokens := Tokenize(item.AsString(stripAnsi), delimiter)
 			trans := Transform(tokens, ranges)
 			str := string(joinTokens(trans))
 			if delimiter.str != nil {
@@ -1341,7 +1344,12 @@ func (t *Terminal) Loop() {
 		}()
 	}
 
-	exit := func(code int) {
+	exit := func(getCode func() int) {
+		if !t.cleanExit && t.fullscreen && t.inlineInfo {
+			t.placeCursor()
+		}
+		t.tui.Close()
+		code := getCode()
 		if code <= exitNoMatch && t.history != nil {
 			t.history.append(string(t.input))
 		}
@@ -1389,11 +1397,12 @@ func (t *Terminal) Loop() {
 					case reqRedraw:
 						t.redraw()
 					case reqClose:
-						t.tui.Close()
-						if t.output() {
-							exit(exitOk)
-						}
-						exit(exitNoMatch)
+						exit(func() int {
+							if t.output() {
+								return exitOk
+							}
+							return exitNoMatch
+						})
 					case reqPreviewDisplay:
 						t.previewer.text = value.(string)
 						t.previewer.lines = strings.Count(t.previewer.text, "\n")
@@ -1402,12 +1411,12 @@ func (t *Terminal) Loop() {
 					case reqPreviewRefresh:
 						t.printPreview()
 					case reqPrintQuery:
-						t.tui.Close()
-						t.printer(string(t.input))
-						exit(exitOk)
+						exit(func() int {
+							t.printer(string(t.input))
+							return exitOk
+						})
 					case reqQuit:
-						t.tui.Close()
-						exit(exitInterrupt)
+						exit(func() int { return exitInterrupt })
 					}
 				}
 				t.placeCursor()

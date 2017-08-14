@@ -10,12 +10,12 @@ import (
 
 // fuzzy
 // 'exact
-// ^exact-prefix
-// exact-suffix$
-// !not-fuzzy
-// !'not-exact
-// !^not-exact-prefix
-// !not-exact-suffix$
+// ^prefix-exact
+// suffix-exact$
+// !inverse-exact
+// !'inverse-fuzzy
+// !^inverse-prefix-exact
+// !inverse-suffix-exact$
 
 type termType int
 
@@ -32,7 +32,6 @@ type term struct {
 	inv           bool
 	text          []rune
 	caseSensitive bool
-	origText      []rune
 }
 
 type termSet []term
@@ -48,6 +47,7 @@ type Pattern struct {
 	text          []rune
 	termSets      []termSet
 	cacheable     bool
+	cacheKey      string
 	delimiter     Delimiter
 	nth           []Range
 	procFun       map[termType]algo.Algo
@@ -60,7 +60,7 @@ var (
 )
 
 func init() {
-	_splitRegex = regexp.MustCompile("\\s+")
+	_splitRegex = regexp.MustCompile(" +")
 	clearPatternCache()
 	clearChunkCache()
 }
@@ -81,7 +81,10 @@ func BuildPattern(fuzzy bool, fuzzyAlgo algo.Algo, extended bool, caseMode Case,
 
 	var asString string
 	if extended {
-		asString = strings.Trim(string(runes), " ")
+		asString = strings.TrimLeft(string(runes), " ")
+		for strings.HasSuffix(asString, " ") && !strings.HasSuffix(asString, "\\ ") {
+			asString = asString[:len(asString)-1]
+		}
 	} else {
 		asString = string(runes)
 	}
@@ -101,7 +104,7 @@ func BuildPattern(fuzzy bool, fuzzyAlgo algo.Algo, extended bool, caseMode Case,
 			for idx, term := range termSet {
 				// If the query contains inverse search terms or OR operators,
 				// we cannot cache the search scope
-				if !cacheable || idx > 0 || term.inv || !fuzzy && term.typ != termExact {
+				if !cacheable || idx > 0 || term.inv || fuzzy && term.typ != termFuzzy || !fuzzy && term.typ != termExact {
 					cacheable = false
 					break Loop
 				}
@@ -130,6 +133,7 @@ func BuildPattern(fuzzy bool, fuzzyAlgo algo.Algo, extended bool, caseMode Case,
 		delimiter:     delimiter,
 		procFun:       make(map[termType]algo.Algo)}
 
+	ptr.cacheKey = ptr.buildCacheKey()
 	ptr.procFun[termFuzzy] = fuzzyAlgo
 	ptr.procFun[termEqual] = algo.EqualMatch
 	ptr.procFun[termExact] = algo.ExactMatchNaive
@@ -141,32 +145,40 @@ func BuildPattern(fuzzy bool, fuzzyAlgo algo.Algo, extended bool, caseMode Case,
 }
 
 func parseTerms(fuzzy bool, caseMode Case, normalize bool, str string) []termSet {
+	str = strings.Replace(str, "\\ ", "\t", -1)
 	tokens := _splitRegex.Split(str, -1)
 	sets := []termSet{}
 	set := termSet{}
 	switchSet := false
+	afterBar := false
 	for _, token := range tokens {
-		typ, inv, text := termFuzzy, false, token
+		typ, inv, text := termFuzzy, false, strings.Replace(token, "\t", " ", -1)
 		lowerText := strings.ToLower(text)
 		caseSensitive := caseMode == CaseRespect ||
 			caseMode == CaseSmart && text != lowerText
 		if !caseSensitive {
 			text = lowerText
 		}
-		origText := []rune(text)
 		if !fuzzy {
 			typ = termExact
 		}
 
-		if text == "|" {
+		if len(set) > 0 && !afterBar && text == "|" {
 			switchSet = false
+			afterBar = true
 			continue
 		}
+		afterBar = false
 
 		if strings.HasPrefix(text, "!") {
 			inv = true
 			typ = termExact
 			text = text[1:]
+		}
+
+		if text != "$" && strings.HasSuffix(text, "$") {
+			typ = termSuffix
+			text = text[:len(text)-1]
 		}
 
 		if strings.HasPrefix(text, "'") {
@@ -179,16 +191,12 @@ func parseTerms(fuzzy bool, caseMode Case, normalize bool, str string) []termSet
 				text = text[1:]
 			}
 		} else if strings.HasPrefix(text, "^") {
-			if strings.HasSuffix(text, "$") {
+			if typ == termSuffix {
 				typ = termEqual
-				text = text[1 : len(text)-1]
 			} else {
 				typ = termPrefix
-				text = text[1:]
 			}
-		} else if strings.HasSuffix(text, "$") {
-			typ = termSuffix
-			text = text[:len(text)-1]
+			text = text[1:]
 		}
 
 		if len(text) > 0 {
@@ -204,8 +212,7 @@ func parseTerms(fuzzy bool, caseMode Case, normalize bool, str string) []termSet
 				typ:           typ,
 				inv:           inv,
 				text:          textRunes,
-				caseSensitive: caseSensitive,
-				origText:      origText})
+				caseSensitive: caseSensitive})
 			switchSet = true
 		}
 	}
@@ -228,18 +235,22 @@ func (p *Pattern) AsString() string {
 	return string(p.text)
 }
 
-// CacheKey is used to build string to be used as the key of result cache
-func (p *Pattern) CacheKey() string {
+func (p *Pattern) buildCacheKey() string {
 	if !p.extended {
 		return p.AsString()
 	}
 	cacheableTerms := []string{}
 	for _, termSet := range p.termSets {
 		if len(termSet) == 1 && !termSet[0].inv && (p.fuzzy || termSet[0].typ == termExact) {
-			cacheableTerms = append(cacheableTerms, string(termSet[0].origText))
+			cacheableTerms = append(cacheableTerms, string(termSet[0].text))
 		}
 	}
-	return strings.Join(cacheableTerms, " ")
+	return strings.Join(cacheableTerms, "\t")
+}
+
+// CacheKey is used to build string to be used as the key of result cache
+func (p *Pattern) CacheKey() string {
+	return p.cacheKey
 }
 
 // Match returns the list of matches Items in the given Chunk

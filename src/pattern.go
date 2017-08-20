@@ -278,8 +278,8 @@ func (p *Pattern) matchChunk(chunk *Chunk, space []Result, slab *util.Slab) []Re
 	matches := []Result{}
 
 	if space == nil {
-		for idx := range *chunk {
-			if match, _, _ := p.MatchItem(&(*chunk)[idx], false, slab); match != nil {
+		for idx := 0; idx < chunk.count; idx++ {
+			if match, _, _ := p.MatchItem(&chunk.items[idx], false, slab); match != nil {
 				matches = append(matches, *match)
 			}
 		}
@@ -387,7 +387,7 @@ func (p *Pattern) transformInput(item *Item) []Token {
 
 func (p *Pattern) iter(pfun algo.Algo, tokens []Token, caseSensitive bool, normalize bool, forward bool, pattern []rune, withPos bool, slab *util.Slab) (Offset, int, *[]int) {
 	for _, part := range tokens {
-		if res, pos := pfun(caseSensitive, normalize, forward, *part.text, pattern, withPos, slab); res.Start >= 0 {
+		if res, pos := pfun(caseSensitive, normalize, forward, part.text, pattern, withPos, slab); res.Start >= 0 {
 			sidx := int32(res.Start) + part.prefixLength
 			eidx := int32(res.End) + part.prefixLength
 			if pos != nil {

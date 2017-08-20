@@ -69,8 +69,9 @@ func TestExact(t *testing.T) {
 	clearPatternCache()
 	pattern := BuildPattern(true, algo.FuzzyMatchV2, true, CaseSmart, false, true, true,
 		[]Range{}, Delimiter{}, []rune("'abc"))
+	chars := util.ToChars([]byte("aabbcc abc"))
 	res, pos := algo.ExactMatchNaive(
-		pattern.caseSensitive, pattern.normalize, pattern.forward, util.ToChars([]byte("aabbcc abc")), pattern.termSets[0][0].text, true, nil)
+		pattern.caseSensitive, pattern.normalize, pattern.forward, &chars, pattern.termSets[0][0].text, true, nil)
 	if res.Start != 7 || res.End != 10 {
 		t.Errorf("%s / %d / %d", pattern.termSets, res.Start, res.End)
 	}
@@ -85,8 +86,9 @@ func TestEqual(t *testing.T) {
 	pattern := BuildPattern(true, algo.FuzzyMatchV2, true, CaseSmart, false, true, true, []Range{}, Delimiter{}, []rune("^AbC$"))
 
 	match := func(str string, sidxExpected int, eidxExpected int) {
+		chars := util.ToChars([]byte(str))
 		res, pos := algo.EqualMatch(
-			pattern.caseSensitive, pattern.normalize, pattern.forward, util.ToChars([]byte(str)), pattern.termSets[0][0].text, true, nil)
+			pattern.caseSensitive, pattern.normalize, pattern.forward, &chars, pattern.termSets[0][0].text, true, nil)
 		if res.Start != sidxExpected || res.End != eidxExpected {
 			t.Errorf("%s / %d / %d", pattern.termSets, res.Start, res.End)
 		}
@@ -130,12 +132,11 @@ func TestOrigTextAndTransformed(t *testing.T) {
 
 	origBytes := []byte("junegunn.choi")
 	for _, extended := range []bool{false, true} {
-		chunk := Chunk{
-			Item{
-				text:        util.ToChars([]byte("junegunn")),
-				origText:    &origBytes,
-				transformed: &trans},
-		}
+		chunk := Chunk{count: 1}
+		chunk.items[0] = Item{
+			text:        util.ToChars([]byte("junegunn")),
+			origText:    &origBytes,
+			transformed: &trans}
 		pattern.extended = extended
 		matches := pattern.matchChunk(&chunk, nil, slab) // No cache
 		if !(matches[0].item.text.ToString() == "junegunn" &&
@@ -144,7 +145,7 @@ func TestOrigTextAndTransformed(t *testing.T) {
 			t.Error("Invalid match result", matches)
 		}
 
-		match, offsets, pos := pattern.MatchItem(&chunk[0], true, slab)
+		match, offsets, pos := pattern.MatchItem(&chunk.items[0], true, slab)
 		if !(match.item.text.ToString() == "junegunn" &&
 			string(*match.item.origText) == "junegunn.choi" &&
 			offsets[0][0] == 0 && offsets[0][1] == 5 &&

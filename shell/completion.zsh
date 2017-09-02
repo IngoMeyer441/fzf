@@ -209,7 +209,7 @@ fzf-completion() {
     zle redisplay
     typeset -f zle-line-init >/dev/null && zle zle-line-init
   # Trigger sequence given
-  elif [ ${#tokens} -gt 1 ] && ( (( ${triggers[(I)${tail}]} )) || (( ${triggers[(I)${reversed_head}]} )) ); then
+  elif [ ${#tokens} -gt 1 ] && ( (( ${triggers[(Ie)${tail}]} )) || (( ${triggers[(Ie)${reversed_head}]} )) ); then
     if (( ${triggers[(I)${tail}]} )); then
       current_trigger="$tail"
       prefix=${tokens[-1]:0:-${#current_trigger}}

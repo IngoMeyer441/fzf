@@ -29,19 +29,37 @@ fi
 
 if ! declare -f _fzf_compgen_fasd_path > /dev/null; then
   _fzf_compgen_fasd_path() {
-    command fasd -Ral | sed "s%^${PWD}/%%"
+    if [[ "$(uname)" == "Linux" ]]; then
+      command fasd -Ral | sed "s%^${PWD}/%%" | xargs ls -d --color=always 2>/dev/null
+    elif command which gnu_ls >/dev/null 2>&1; then
+      command fasd -Ral | sed "s%^${PWD}/%%" | xargs gnu_ls -d --color=always 2>/dev/null
+    else
+      command fasd -Ral | sed "s%^${PWD}/%%"
+    fi
   }
 fi
 
 if ! declare -f _fzf_compgen_fasd_file > /dev/null; then
   _fzf_compgen_fasd_file() {
-    command fasd -Rfl | sed "s%^${PWD}/%%"
+    if [[ "$(uname)" == "Linux" ]]; then
+      command fasd -Rfl | sed "s%^${PWD}/%%" | xargs ls -d --color=always 2>/dev/null
+    elif command which gnu_ls >/dev/null 2>&1; then
+      command fasd -Rfl | sed "s%^${PWD}/%%" | xargs gnu_ls -d --color=always 2>/dev/null
+    else
+      command fasd -Rfl | sed "s%^${PWD}/%%"
+    fi
   }
 fi
 
 if ! declare -f _fzf_compgen_fasd_dir > /dev/null; then
   _fzf_compgen_fasd_dir() {
-    command fasd -Rdl | sed "s%^${PWD}/%%"
+    if [[ "$(uname)" == "Linux" ]]; then
+      command fasd -Rdl | sed "s%^${PWD}/%%" | xargs ls -d --color=always 2>/dev/null
+    elif command which gnu_ls >/dev/null 2>&1; then
+      command fasd -Rdl | sed "s%^${PWD}/%%" | xargs gnu_ls -d --color=always 2>/dev/null
+    else
+      command fasd -Rdl | sed "s%^${PWD}/%%"
+    fi
   }
 fi
 

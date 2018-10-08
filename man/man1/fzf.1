@@ -21,7 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ..
-.TH fzf 1 "Jun 2018" "fzf 0.17.4" "fzf - a command-line fuzzy finder"
+.TH fzf 1 "Oct 2018" "fzf 0.17.5" "fzf - a command-line fuzzy finder"
 
 .SH NAME
 fzf - a command-line fuzzy finder
@@ -390,7 +390,8 @@ Note that most options have the opposite versions with \fB--no-\fR prefix.
 .SH ENVIRONMENT VARIABLES
 .TP
 .B FZF_DEFAULT_COMMAND
-Default command to use when input is tty
+Default command to use when input is tty. On *nix systems, fzf runs the command
+with \fBsh -c\fR, so make sure that it's POSIX-compliant.
 .TP
 .B FZF_DEFAULT_OPTS
 Default options. e.g. \fBexport FZF_DEFAULT_OPTS="--extended --cycle"\fR

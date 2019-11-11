@@ -216,6 +216,12 @@ fzf-completion() {
   tail=${LBUFFER:$(( ${#LBUFFER} - ${#trigger_general} ))}
   reversed_head=$(echo ${tokens[-1]:0:${#trigger_general}} | rev)
 
+  # When the trigger starts with ';', it becomes a separate token
+  if [[ ${LBUFFER} = *"${tokens[-2]}${tokens[-1]}" ]]; then
+    tokens[-2]="${tokens[-2]}${tokens[-1]}"
+    tokens=(${tokens[0,-2]})
+  fi
+
   # Kill completion (do not require trigger sequence)
   if [ $cmd = kill -a ${LBUFFER[-1]} = ' ' ]; then
     fzf="$(__fzfcmd_complete)"

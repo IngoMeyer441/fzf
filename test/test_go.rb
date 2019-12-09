@@ -1640,6 +1640,43 @@ class TestGoFZF < TestBase
     tmux.until { |lines| lines.item_count == 553 && lines.match_count == 1 }
     tmux.until { |lines| !lines[-2].include?('(1/2)') }
   end
+
+  def test_reload_even_when_theres_no_match
+    tmux.send_keys %(: | #{FZF} --bind 'space:reload(seq 10)'), :Enter
+    tmux.until { |lines| lines.item_count.zero? }
+    tmux.send_keys :Space
+    tmux.until { |lines| lines.item_count == 10 }
+  end
+
+  def test_clear_list_when_header_lines_changed_due_to_reload
+    tmux.send_keys %(seq 10 | #{FZF} --header 0 --header-lines 3 --bind 'space:reload(seq 1)'), :Enter
+    tmux.until { |lines| lines.any? { |line| line.include?('9') } }
+    tmux.send_keys :Space
+    tmux.until { |lines| lines.none? { |line| line.include?('9') } }
+  end
+
+  def test_clear_query
+    tmux.send_keys %(: | #{FZF} --query foo --bind space:clear-query), :Enter
+    tmux.until { |lines| lines.item_count.zero? }
+    tmux.until { |lines| lines.last.include?('> foo') }
+    tmux.send_keys 'C-a', 'bar'
+    tmux.until { |lines| lines.last.include?('> barfoo') }
+    tmux.send_keys :Space
+    tmux.until { |lines| lines.last == '>' }
+  end
+
+  def test_clear_selection
+    tmux.send_keys %(seq 100 | #{FZF} --multi --bind space:clear-selection), :Enter
+    tmux.until { |lines| lines.match_count == 100 }
+    tmux.send_keys :Tab
+    tmux.until { |lines| lines[-2].include?('(1)') }
+    tmux.send_keys 'foo'
+    tmux.until { |lines| lines.match_count.zero? }
+    tmux.until { |lines| lines[-2].include?('(1)') }
+    tmux.send_keys :Space
+    tmux.until { |lines| lines.match_count.zero? }
+    tmux.until { |lines| !lines[-2].include?('(1)') }
+  end
 end
 
 module TestShell

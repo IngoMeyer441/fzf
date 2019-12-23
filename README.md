@@ -436,7 +436,7 @@ On bash, fuzzy completion is enabled only for a predefined set of commands
 commands as well by using `_fzf_setup_completion` helper function.
 
 ```sh
-# usage: _fzf_setup_completion path|dir COMMANDS...
+# usage: _fzf_setup_completion path|dir|var|alias|host COMMANDS...
 _fzf_setup_completion path ag git kubectl
 _fzf_setup_completion dir tree
 ```
@@ -510,10 +510,13 @@ fzf --preview 'bat --style=numbers --color=always {} | head -500'
 ```
 
 You can customize the size, position, and border of the preview window using
-`--preview-window` option.
+`--preview-window` option, and the foreground and background color of it with
+`--color` option. For example,
 
 ```bash
-fzf --height 40% --layout reverse --preview 'file {}' --preview-window down:1
+fzf --height 40% --layout reverse --info inline --border \
+    --preview 'file {}' --preview-window down:1:noborder \
+    --color 'fg:#bbccdd,fg+:#ddeeff,bg:#334455,preview-bg:#223344,border:#778899'
 ```
 
 See the man page (`man fzf`) for the full list of options.

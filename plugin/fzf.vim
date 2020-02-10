@@ -650,7 +650,11 @@ function! s:split(dict)
   let ppos = s:getpos()
   try
     if s:present(a:dict, 'window')
-      execute 'keepalt' a:dict.window
+      if type(a:dict.window) == type({})
+        call s:popup(a:dict.window)
+      else
+        execute 'keepalt' a:dict.window
+      endif
     elseif !s:splittable(a:dict)
       execute (tabpagenr()-1).'tabnew'
     else
@@ -742,6 +746,9 @@ function! s:execute_term(dict, command, temps) abort
     if has('nvim')
       call termopen(command, fzf)
     else
+      if !len(&bufhidden)
+        setlocal bufhidden=hide
+      endif
       let fzf.buf = term_start([&shell, &shellcmdflag, command], {'curwin': 1, 'exit_cb': function(fzf.on_exit)})
       if !has('patch-8.0.1261') && !has('nvim') && !s:is_win
         call term_wait(fzf.buf, 20)
@@ -795,6 +802,88 @@ function! s:callback(dict, lines) abort
   if popd
     let w:fzf_pushd = a:dict.pushd
     call s:dopopd()
+  endif
+endfunction
+
+if has('nvim')
+  function s:create_popup(hl, opts) abort
+    let buf = nvim_create_buf(v:false, v:true)
+    let opts = extend({'relative': 'editor', 'style': 'minimal'}, a:opts)
+    let border = has_key(opts, 'border') ? remove(opts, 'border') : []
+    let win = nvim_open_win(buf, v:true, opts)
+    call setwinvar(win, '&winhighlight', 'NormalFloat:'..a:hl)
+    call setwinvar(win, '&colorcolumn', '')
+    if !empty(border)
+      call nvim_buf_set_lines(buf, 0, -1, v:true, border)
+    endif
+    return buf
+  endfunction
+else
+  function! s:create_popup(hl, opts) abort
+    let is_frame = has_key(a:opts, 'border')
+    let buf = is_frame ? '' : term_start(&shell, #{hidden: 1})
+    let id = popup_create(buf, #{
+      \ line: a:opts.row,
+      \ col: a:opts.col,
+      \ minwidth: a:opts.width,
+      \ minheight: a:opts.height,
+      \ zindex: 50 - is_frame,
+    \ })
+
+    if is_frame
+      call setwinvar(id, '&wincolor', a:hl)
+      call setbufline(winbufnr(id), 1, a:opts.border)
+      execute 'autocmd BufWipeout * ++once call popup_close('..id..')'
+    else
+      execute 'autocmd BufWipeout * ++once bwipeout! '..buf
+    endif
+    return winbufnr(id)
+  endfunction
+endif
+
+function! s:popup(opts) abort
+  " Size and position
+  let width = min([max([0, float2nr(&columns * a:opts.width)]), &columns])
+  let height = min([max([0, float2nr(&lines * a:opts.height)]), &lines - has('nvim')])
+  let row = float2nr(get(a:opts, 'yoffset', 0.5) * (&lines - height))
+  let col = float2nr(get(a:opts, 'xoffset', 0.5) * (&columns - width))
+
+  " Managing the differences
+  let row = min([max([0, row]), &lines - has('nvim') - height])
+  let col = min([max([0, col]), &columns - width])
+  let row += !has('nvim')
+  let col += !has('nvim')
+
+  " Border style
+  let style = get(a:opts, 'border', 'rounded')
+  if !has_key(a:opts, 'border') && !get(a:opts, 'rounded', 1)
+    let style = 'sharp'
+  endif
+
+  if style == 'horizontal'
+    let hor = repeat('─', width)
+    let mid = repeat(' ', width)
+    let border = [hor] + repeat([mid], height - 2) + [hor]
+    let margin = 0
+  else
+    let edges = style == 'sharp' ? ['┌', '┐', '└', '┘'] : ['╭', '╮', '╰', '╯']
+    let bar = repeat('─', width - 2)
+    let top = edges[0] .. bar .. edges[1]
+    let mid = '│' .. repeat(' ', width - 2) .. '│'
+    let bot = edges[2] .. bar .. edges[3]
+    let border = [top] + repeat([mid], height - 2) + [bot]
+    let margin = 2
+  endif
+
+  let highlight = get(a:opts, 'highlight', 'Comment')
+  let frame = s:create_popup(highlight, {
+    \ 'row': row, 'col': col, 'width': width, 'height': height, 'border': border
+  \ })
+  call s:create_popup('Normal', {
+    \ 'row': row + 1, 'col': col + margin, 'width': width - margin * 2, 'height': height - 2
+  \ })
+  if has('nvim')
+    execute 'autocmd BufWipeout <buffer> bwipeout '..frame
   endif
 endfunction
 

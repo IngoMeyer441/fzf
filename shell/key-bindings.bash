@@ -53,67 +53,46 @@ __fzf_cd__() {
 
 __fzf_history__() (
   local line
-  shopt -u nocaseglob nocasematch
   line=$(
-    HISTTIMEFORMAT= builtin history |
-    FZF_DEFAULT_OPTS="--height ${FZF_TMUX_HEIGHT:-40%} $FZF_DEFAULT_OPTS --tac --sync -n2..,.. --tiebreak=index --bind=ctrl-r:toggle-sort $FZF_CTRL_R_OPTS +m" $(__fzfcmd) |
-    command grep '^ *[0-9]') &&
-    if [[ $- =~ H ]]; then
-      sed 's/^ *\([0-9]*\)\** .*/!\1/' <<< "$line"
-    else
-      sed 's/^ *\([0-9]*\)\** *//' <<< "$line"
-    fi
+    builtin fc -lnr -2147483648 |
+      perl -p -l0 -e 'BEGIN { getc; $/ = "\n\t" } s/^[ *]//; $_ = '"$1"' - $. . "\t$_"' |
+      FZF_DEFAULT_OPTS="--height ${FZF_TMUX_HEIGHT:-40%} $FZF_DEFAULT_OPTS --tiebreak=index --bind=ctrl-r:toggle-sort $FZF_CTRL_R_OPTS +m --read0" $(__fzfcmd)
+  )
+  echo "${line#*$'\t'}"
 )
 
 # Required to refresh the prompt after fzf
 bind -m emacs-standard '"\er": redraw-current-line'
-bind -m emacs-standard '"\e^": history-expand-line'
 
 # CTRL-T - Paste the selected file path into the command line
 if [ $BASH_VERSINFO -gt 3 ]; then
   bind -m emacs-standard -x '"\C-t": "fzf-file-widget"'
 elif __fzf_use_tmux__; then
-  bind -m emacs-standard '"\C-t": " \C-u \C-a\C-k`__fzf_select_tmux__`\e\C-e\C-y\C-a\C-d\C-y\ey\C-h"'
+  bind -m emacs-standard '"\C-t": " \C-b\C-k \C-u`__fzf_select_tmux__`\e\C-e\C-a\C-y\C-h\C-e\e \C-y\ey\C-x\C-x\C-f"'
 else
-  bind -m emacs-standard '"\C-t": " \C-u \C-a\C-k`__fzf_select__`\e\C-e\C-y\C-a\C-y\ey\C-h\C-e\er \C-h"'
+  bind -m emacs-standard '"\C-t": " \C-b\C-k \C-u`__fzf_select__`\e\C-e\er\C-a\C-y\C-h\C-e\e \C-y\ey\C-x\C-x\C-f"'
 fi
 
 # CTRL-R - Paste the selected command from history into the command line
-bind -m emacs-standard '"\C-r": " \C-e\C-u\C-y\ey\C-u`__fzf_history__`\e\C-e\er\e^"'
+bind -m emacs-standard '"\C-r": "\C-e \C-u\C-y\ey\C-u__fzf_history__ $HISTCMD\e\C-e`"\C-a"`\C-e\e\C-e\er"'
 
 # ALT-C - cd into the selected directory
-bind -m emacs-standard '"\ec": " \C-e\C-u`__fzf_cd__`\e\C-e\er\C-m"'
+bind -m emacs-standard '"\ec": " \C-b\C-k \C-u`__fzf_cd__`\e\C-e\er\C-m\C-y\C-h\e \C-y\ey\C-x\C-x\C-d"'
 
-# We'd usually use "\e" to enter vi-movement-mode so we can do our magic,
-# but this incurs a very noticeable delay of a half second or so,
-# because many other commands start with "\e".
-# Instead, we bind an unused key, "\C-x\C-a",
-# to also enter vi-movement-mode,
-# and then use that thereafter.
-# (We imagine that "\C-x\C-a" is relatively unlikely to be in use.)
-bind -m vi-insert '"\C-x\C-a": vi-movement-mode'
-
-bind -m vi-insert '"\C-x\C-e": shell-expand-line'
-bind -m vi-insert '"\C-x\C-r": redraw-current-line'
-bind -m vi-insert '"\C-x^": history-expand-line'
+bind -m vi-command '"\C-z": emacs-editing-mode'
+bind -m vi-insert '"\C-z": emacs-editing-mode'
+bind -m emacs-standard '"\C-z": vi-editing-mode'
 
 # CTRL-T - Paste the selected file path into the command line
-# - FIXME: Selected items are attached to the end regardless of cursor position
-if [ $BASH_VERSINFO -gt 3 ]; then
-  bind -m vi-insert -x '"\C-t": "fzf-file-widget"'
-elif __fzf_use_tmux__; then
-  bind -m vi-insert '"\C-t": "\C-x\C-a$a \C-x\C-addi`__fzf_select_tmux__`\C-x\C-e\C-x\C-a0P$xa"'
-else
-  bind -m vi-insert '"\C-t": "\C-x\C-a$a \C-x\C-addi`__fzf_select__`\C-x\C-e\C-x\C-a0Px$a \C-x\C-r\C-x\C-axa "'
-fi
-bind -m vi-command '"\C-t": "i\C-t"'
+bind -m vi-command '"\C-t": "\C-z\C-t\C-z"'
+bind -m vi-insert '"\C-t": "\C-z\C-t\C-z"'
 
 # CTRL-R - Paste the selected command from history into the command line
-bind -m vi-insert '"\C-r": "\C-x\C-addi`__fzf_history__`\C-x\C-e\C-x\C-r\C-x^\C-x\C-a$a"'
-bind -m vi-command '"\C-r": "i\C-r"'
+bind -m vi-command '"\C-r": "\C-z\C-r\C-z"'
+bind -m vi-insert '"\C-r": "\C-z\C-r\C-z"'
 
 # ALT-C - cd into the selected directory
-bind -m vi-insert '"\ec": "\C-x\C-addi`__fzf_cd__`\C-x\C-e\C-x\C-r\C-m"'
-bind -m vi-command '"\ec": "ddi`__fzf_cd__`\C-x\C-e\C-x\C-r\C-m"'
+bind -m vi-command '"\ec": "\C-z\ec\C-z"'
+bind -m vi-insert '"\ec": "\C-z\ec\C-z"'
 
 fi

@@ -1716,6 +1716,18 @@ class TestGoFZF < TestBase
     tmux.prepare
   end
 
+  def test_strip_xterm_osc_sequence
+    %W[\x07 \x1b\\].each do |esc|
+      writelines tempname, [%(printf $1"\e]4;3;rgb:aa/bb/cc#{esc} "$2)]
+      File.chmod(0o755, tempname)
+      tmux.prepare
+      tmux.send_keys(
+        %(echo foo bar | #{FZF} --preview '#{tempname} {2} {1}'), :Enter
+      )
+      tmux.until { |lines| lines.any_include?('bar foo') }
+      tmux.send_keys :Enter
+    end
+  end
 end
 
 module TestShell
@@ -1841,8 +1853,11 @@ module TestShell
   def test_ctrl_r_multiline
     tmux.send_keys 'echo "foo', :Enter, 'bar"', :Enter
     tmux.until { |lines| lines[-2..-1] == ['foo', 'bar'] }
-    tmux.send_keys 'C-r'
-    tmux.until { |lines| lines[-1] == '>' }
+    retries do
+      tmux.prepare
+      tmux.send_keys 'C-r'
+      tmux.until { |lines| lines[-1] == '>' }
+    end
     tmux.send_keys 'foo bar'
     tmux.until { |lines| lines[-3].end_with? 'bar"' }
     tmux.send_keys :Enter
@@ -1854,11 +1869,13 @@ module TestShell
   def test_ctrl_r_abort
     skip "doesn't restore the original line when search is aborted pre Bash 4" if shell == :bash && /(?<= version )\d+/.match(`#{Shell.bash} --version`).to_s.to_i < 4
     %w[foo ' "].each do |query|
-      tmux.prepare
-      tmux.send_keys(query)
-      tmux.until { |lines| lines[-1].start_with? query }
-      tmux.send_keys 'C-r'
-      tmux.until { |lines| lines[-1] == "> #{query}" }
+      retries do
+        tmux.prepare
+        tmux.send_keys(:Space, 'C-e', 'C-u', query)
+        tmux.until { |lines| lines[-1].start_with? query }
+        tmux.send_keys 'C-r'
+        tmux.until { |lines| lines[-1] == "> #{query}" }
+      end
       tmux.send_keys 'C-g'
       tmux.until { |lines| lines[-1].start_with? query }
     end

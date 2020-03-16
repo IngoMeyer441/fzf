@@ -130,6 +130,10 @@ the details.
 .B "--cycle"
 Enable cyclic scroll
 .TP
+.B "--keep-right"
+Keep the right end of the line visible when it's too long. Effective only when
+the query string is empty.
+.TP
 .B "--no-hscroll"
 Disable horizontal scroll
 .TP
@@ -288,8 +292,8 @@ format.
     \fBbg+        \fRBackground (current line)
     \fBgutter     \fRGutter on the left (defaults to \fBbg+\fR)
     \fBhl+        \fRHighlighted substrings (current line)
-    \fBinfo       \fRInfo
-    \fBborder     \fRBorder of the preview window and horizontal separators (\fB--border\fR)
+    \fBinfo       \fRInfo line (match counters)
+    \fBborder     \fRBorder around the window (\fB--border\fR and \fB--preview\fR)
     \fBprompt     \fRPrompt
     \fBpointer    \fRPointer to the current line
     \fBmarker     \fRMulti-select marker

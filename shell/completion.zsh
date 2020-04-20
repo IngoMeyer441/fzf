@@ -300,6 +300,16 @@ _fzf_complete_unalias() {
   )
 }
 
+_fzf_complete_kill() {
+  _fzf_complete -m --preview 'echo {}' --preview-window down:3:wrap --min-height 15 -- "$@" < <(
+    command ps -ef | sed 1d
+  )
+}
+
+_fzf_complete_kill_post() {
+  awk '{print $2}'
+}
+
 fzf-completion() {
   local tokens cmd prefix trigger_general trigger_fasd_paths trigger_fasd_files trigger_fasd_dirs triggers current_trigger tail reversed_head matches lbuf d_cmds
   setopt localoptions noshwordsplit noksh_arrays noposixbuiltins
@@ -323,24 +333,24 @@ fzf-completion() {
   triggers=($trigger_general $trigger_fasd_paths $trigger_fasd_files $trigger_fasd_dirs)
   [ -z "$trigger_general" -a ${LBUFFER[-1]} = ' ' ] && tokens+=("")
 
-  tail=${LBUFFER:$(( ${#LBUFFER} - ${#trigger_general} ))}
-  reversed_head=$(echo ${tokens[-1]:0:${#trigger_general}} | rev)
-
   # When the trigger starts with ';', it becomes a separate token
   if [[ ${LBUFFER} = *"${tokens[-2]}${tokens[-1]}" ]]; then
     tokens[-2]="${tokens[-2]}${tokens[-1]}"
     tokens=(${tokens[0,-2]})
   fi
 
+  lbuf=$LBUFFER
+  tail=${LBUFFER:$(( ${#LBUFFER} - ${#trigger_general} ))}
+  reversed_head=$(echo ${tokens[-1]:0:${#trigger_general}} | rev)
   # Kill completion (do not require trigger sequence)
   if [ "$cmd" = kill -a ${LBUFFER[-1]} = ' ' ]; then
-    matches=$(command ps -ef | sed 1d | FZF_DEFAULT_OPTS="--height ${FZF_TMUX_HEIGHT:-50%} --min-height 15 --reverse $FZF_DEFAULT_OPTS $FZF_COMPLETION_OPTS --preview 'echo {}' --preview-window down:3:wrap" __fzf_comprun "$cmd" -m | awk '{print $2}' | tr '\n' ' ')
-    if [ -n "$matches" ]; then
-      LBUFFER="$LBUFFER$matches"
-    fi
-    zle reset-prompt
+    tail=$trigger_general
+    tokens+=$trigger_general
+    lbuf="$lbuf$trigger_general"
+  fi
+
   # Trigger sequence given
-  elif [ ${#tokens} -gt 1 ] && ( (( ${triggers[(Ie)${tail}]} )) || (( ${triggers[(Ie)${reversed_head}]} )) ); then
+  if [ ${#tokens} -gt 1 ] && ( (( ${triggers[(Ie)${tail}]} )) || (( ${triggers[(Ie)${reversed_head}]} )) ); then
     if (( ${triggers[(I)${tail}]} )); then
       current_trigger="$tail"
       prefix=${tokens[-1]:0:-${#current_trigger}}
@@ -351,7 +361,8 @@ fzf-completion() {
 
     d_cmds=(${=FZF_COMPLETION_DIR_COMMANDS:-cd pushd rmdir})
 
-    [ -z "${tokens[-1]}" ] && lbuf=$LBUFFER || lbuf=${LBUFFER:0:-${#tokens[-1]}}
+    [ -z "$current_trigger"      ] && prefix=${tokens[-1]} || prefix=${tokens[-1]:0:-${#current_trigger}}
+    [ -n "${tokens[-1]}" ] && lbuf=${lbuf:0:-${#tokens[-1]}}
 
     if [ "$current_trigger" = "$trigger_general" ]; then
       if eval "type _fzf_complete_${cmd} > /dev/null"; then

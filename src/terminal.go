@@ -64,7 +64,7 @@ type Terminal struct {
 	initDelay    time.Duration
 	infoStyle    infoStyle
 	spinner      []string
-	prompt       string
+	prompt       func()
 	promptLen    int
 	pointer      string
 	pointerLen   int
@@ -224,10 +224,12 @@ const (
 	actJump
 	actJumpAccept
 	actPrintQuery
+	actRefreshPreview
 	actReplaceQuery
 	actToggleSort
 	actTogglePreview
 	actTogglePreviewWrap
+	actPreview
 	actPreviewUp
 	actPreviewDown
 	actPreviewPageUp
@@ -253,6 +255,11 @@ type placeholderFlags struct {
 type searchRequest struct {
 	sort    bool
 	command *string
+}
+
+type previewRequest struct {
+	template string
+	list     []*Item
 }
 
 func toActions(types ...actionType) []action {
@@ -326,6 +333,17 @@ func trimQuery(query string) []rune {
 	return []rune(strings.Replace(query, "\t", " ", -1))
 }
 
+func hasPreviewAction(opts *Options) bool {
+	for _, actions := range opts.Keymap {
+		for _, action := range actions {
+			if action.t == actPreview {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // NewTerminal returns new Terminal object
 func NewTerminal(opts *Options, eventBox *util.EventBox) *Terminal {
 	input := trimQuery(opts.Query)
@@ -343,7 +361,7 @@ func NewTerminal(opts *Options, eventBox *util.EventBox) *Terminal {
 		delay = initialDelay
 	}
 	var previewBox *util.EventBox
-	if len(opts.Preview.command) > 0 {
+	if len(opts.Preview.command) > 0 || hasPreviewAction(opts) {
 		previewBox = util.NewEventBox()
 	}
 	strongAttr := tui.Bold
@@ -451,7 +469,7 @@ func NewTerminal(opts *Options, eventBox *util.EventBox) *Terminal {
 		killChan:    make(chan int),
 		tui:         renderer,
 		initFunc:    func() { renderer.Init() }}
-	t.prompt, t.promptLen = t.processTabs([]rune(opts.Prompt), 0)
+	t.prompt, t.promptLen = t.parsePrompt(opts.Prompt)
 	t.pointer, t.pointerLen = t.processTabs([]rune(opts.Pointer), 0)
 	t.marker, t.markerLen = t.processTabs([]rune(opts.Marker), 0)
 	// Pre-calculated empty pointer and marker signs
@@ -459,6 +477,19 @@ func NewTerminal(opts *Options, eventBox *util.EventBox) *Terminal {
 	t.markerEmpty = strings.Repeat(" ", t.markerLen)
 
 	return &t
+}
+
+func (t *Terminal) parsePrompt(prompt string) (func(), int) {
+	var state *ansiState
+	trimmed, colors, _ := extractColor(prompt, state, nil)
+	item := &Item{text: util.ToChars([]byte(trimmed)), colors: colors}
+	output := func() {
+		t.printHighlighted(
+			Result{item: item}, t.strong, tui.ColPrompt, tui.ColPrompt, false, false)
+	}
+	_, promptLen := t.processTabs([]rune(trimmed), 0)
+
+	return output, promptLen
 }
 
 func (t *Terminal) noInfoLine() bool {
@@ -762,7 +793,7 @@ func (t *Terminal) placeCursor() {
 
 func (t *Terminal) printPrompt() {
 	t.move(0, 0, true)
-	t.window.CPrint(tui.ColPrompt, t.strong, t.prompt)
+	t.prompt()
 
 	before, after := t.updatePromptOffset()
 	t.window.CPrint(tui.ColNormal, t.strong, string(before))
@@ -1583,20 +1614,23 @@ func (t *Terminal) Loop() {
 	if t.hasPreviewer() {
 		go func() {
 			for {
-				var request []*Item
+				var items []*Item
+				var commandTemplate string
 				t.previewBox.Wait(func(events *util.Events) {
 					for req, value := range *events {
 						switch req {
 						case reqPreviewEnqueue:
-							request = value.([]*Item)
+							request := value.(previewRequest)
+							commandTemplate = request.template
+							items = request.list
 						}
 					}
 					events.Clear()
 				})
 				// We don't display preview window if no match
-				if request[0] != nil {
-					command := replacePlaceholder(t.preview.command,
-						t.ansi, t.delimiter, t.printsep, false, string(t.Input()), request)
+				if items[0] != nil {
+					command := replacePlaceholder(commandTemplate,
+						t.ansi, t.delimiter, t.printsep, false, string(t.Input()), items)
 					cmd := util.ExecCommand(command, true)
 					if t.pwindow != nil {
 						env := os.Environ()
@@ -1659,6 +1693,14 @@ func (t *Terminal) Loop() {
 		t.killPreview(code)
 	}
 
+	refreshPreview := func(command string) {
+		if len(command) > 0 && t.isPreviewEnabled() {
+			_, list := t.buildPlusList(command, false)
+			t.cancelPreview()
+			t.previewBox.Set(reqPreviewEnqueue, previewRequest{command, list})
+		}
+	}
+
 	go func() {
 		var focusedIndex int32 = minItem.Index()
 		var version int64 = -1
@@ -1685,11 +1727,7 @@ func (t *Terminal) Loop() {
 						if focusedIndex != currentIndex || version != t.version {
 							version = t.version
 							focusedIndex = currentIndex
-							if t.isPreviewEnabled() {
-								_, list := t.buildPlusList(t.preview.command, false)
-								t.cancelPreview()
-								t.previewBox.Set(reqPreviewEnqueue, list)
-							}
+							refreshPreview(t.preview.command)
 						}
 					case reqJump:
 						if t.merger.Length() == 0 {
@@ -1738,6 +1776,7 @@ func (t *Terminal) Loop() {
 	for looping {
 		var newCommand *string
 		changed := false
+		beof := false
 		queryChanged := false
 
 		event := t.tui.GetChar()
@@ -1752,6 +1791,14 @@ func (t *Terminal) Loop() {
 				if event == reqClose || event == reqQuit {
 					looping = false
 				}
+			}
+		}
+		togglePreview := func(enabled bool) {
+			if t.previewer.enabled != enabled {
+				t.previewer.enabled = enabled
+				t.tui.Clear()
+				t.resizeWindows()
+				req(reqPrompt, reqList, reqInfo, reqHeader)
 			}
 		}
 		toggle := func() bool {
@@ -1802,17 +1849,15 @@ func (t *Terminal) Loop() {
 				return false
 			case actTogglePreview:
 				if t.hasPreviewer() {
-					t.previewer.enabled = !t.previewer.enabled
-					t.tui.Clear()
-					t.resizeWindows()
+					togglePreview(!t.previewer.enabled)
 					if t.previewer.enabled {
 						valid, list := t.buildPlusList(t.preview.command, false)
 						if valid {
 							t.cancelPreview()
-							t.previewBox.Set(reqPreviewEnqueue, list)
+							t.previewBox.Set(reqPreviewEnqueue,
+								previewRequest{t.preview.command, list})
 						}
 					}
-					req(reqPrompt, reqList, reqInfo, reqHeader)
 				}
 			case actTogglePreviewWrap:
 				if t.hasPreviewWindow() {
@@ -1846,6 +1891,11 @@ func (t *Terminal) Loop() {
 				}
 			case actPrintQuery:
 				req(reqPrintQuery)
+			case actPreview:
+				togglePreview(true)
+				refreshPreview(a.a)
+			case actRefreshPreview:
+				refreshPreview(t.preview.command)
 			case actReplaceQuery:
 				if t.cy >= 0 && t.cy < t.merger.Length() {
 					t.input = t.merger.Get(t.cy).item.text.ToRunes()
@@ -1881,6 +1931,7 @@ func (t *Terminal) Loop() {
 					t.cx++
 				}
 			case actBackwardDeleteChar:
+				beof = len(t.input) == 0
 				if t.cx > 0 {
 					t.input = append(t.input[:t.cx-1], t.input[t.cx:]...)
 					t.cx--
@@ -1973,16 +2024,19 @@ func (t *Terminal) Loop() {
 				t.vset(0)
 				req(reqList)
 			case actUnixLineDiscard:
+				beof = len(t.input) == 0
 				if t.cx > 0 {
 					t.yanked = copySlice(t.input[:t.cx])
 					t.input = t.input[t.cx:]
 					t.cx = 0
 				}
 			case actUnixWordRubout:
+				beof = len(t.input) == 0
 				if t.cx > 0 {
 					t.rubout("\\s\\S")
 				}
 			case actBackwardKillWord:
+				beof = len(t.input) == 0
 				if t.cx > 0 {
 					t.rubout(t.wordRubout)
 				}
@@ -2142,6 +2196,11 @@ func (t *Terminal) Loop() {
 			changed = changed || queryChanged
 			if onChanges, prs := t.keymap[tui.Change]; queryChanged && prs {
 				if !doActions(onChanges, tui.Change) {
+					continue
+				}
+			}
+			if onEOFs, prs := t.keymap[tui.BackwardEOF]; beof && prs {
+				if !doActions(onEOFs, tui.BackwardEOF) {
 					continue
 				}
 			}

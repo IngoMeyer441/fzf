@@ -23,12 +23,14 @@ import (
 // import "github.com/pkg/profile"
 
 var placeholder *regexp.Regexp
+var numericPrefix *regexp.Regexp
 var activeTempFiles []string
 
 const ellipsis string = ".."
 
 func init() {
 	placeholder = regexp.MustCompile(`\\?(?:{[+sf]*[0-9,-.]*}|{q}|{\+?f?nf?})`)
+	numericPrefix = regexp.MustCompile(`^[[:punct:]]*([0-9]+)`)
 	activeTempFiles = []string{}
 }
 
@@ -405,8 +407,8 @@ func NewTerminal(opts *Options, eventBox *util.EventBox) *Terminal {
 		}
 		renderer = tui.NewLightRenderer(opts.Theme, opts.Black, opts.Mouse, opts.Tabstop, opts.ClearOnExit, false, maxHeightFunc)
 	}
-	wordRubout := "[^[:alnum:]][[:alnum:]]"
-	wordNext := "[[:alnum:]][^[:alnum:]]|(.$)"
+	wordRubout := "[^\\pL\\pN][\\pL\\pN]"
+	wordNext := "[\\pL\\pN][^\\pL\\pN]|(.$)"
 	if opts.FileWord {
 		sep := regexp.QuoteMeta(string(os.PathSeparator))
 		wordRubout = fmt.Sprintf("%s[^%s]", sep, sep)
@@ -1232,7 +1234,8 @@ func findLastMatch(pattern string, str string) int {
 	if locs == nil {
 		return -1
 	}
-	return locs[len(locs)-1][0]
+	prefix := []rune(str[:locs[len(locs)-1][0]])
+	return len(prefix)
 }
 
 func findFirstMatch(pattern string, str string) int {
@@ -1244,7 +1247,8 @@ func findFirstMatch(pattern string, str string) int {
 	if loc == nil {
 		return -1
 	}
-	return loc[0]
+	prefix := []rune(str[:loc[0]])
+	return len(prefix)
 }
 
 func copySlice(slice []rune) []rune {
@@ -1359,7 +1363,11 @@ func (t *Terminal) replacePlaceholder(template string, forcePlus bool, input str
 
 // Ascii to positive integer
 func atopi(s string) int {
-	n, e := strconv.Atoi(strings.ReplaceAll(s, "'", ""))
+	matches := numericPrefix.FindStringSubmatch(s)
+	if len(matches) < 2 {
+		return 0
+	}
+	n, e := strconv.Atoi(matches[1])
 	if e != nil || n < 1 {
 		return 0
 	}

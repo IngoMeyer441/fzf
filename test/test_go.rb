@@ -1801,9 +1801,20 @@ class TestGoFZF < TestBase
   end
 
   def test_preview_scroll_begin_and_offset
-    tmux.send_keys "echo foo 123 321 | #{FZF} --preview 'seq 1000' --preview-window left:+{2}-2", :Enter
-    tmux.until { |lines| lines.item_count == 1 }
-    tmux.until { |lines| assert_match %r{121.*121/1000}, lines[1] }
+    ['echo foo 123 321', 'echo foo :123: 321'].each do |input|
+      tmux.send_keys "#{input} | #{FZF} --preview 'seq 1000' --preview-window left:+{2}-2", :Enter
+      tmux.until { |lines| lines.item_count == 1 }
+      tmux.until { |lines| assert_match %r{121.*121/1000}, lines[1] }
+      tmux.send_keys 'C-c'
+    end
+  end
+
+  def test_normalized_match
+    echoes = '(echo a; echo á; echo A; echo Á;)'
+    assert_equal %w[a á A Á], `#{echoes} | #{FZF} -f a`.lines.map(&:chomp)
+    assert_equal %w[á Á], `#{echoes} | #{FZF} -f á`.lines.map(&:chomp)
+    assert_equal %w[A Á], `#{echoes} | #{FZF} -f A`.lines.map(&:chomp)
+    assert_equal %w[Á], `#{echoes} | #{FZF} -f Á`.lines.map(&:chomp)
   end
 end
 

@@ -3,9 +3,39 @@ CHANGELOG
 
 0.24.0
 ------
-- fzf can render preview window before the command completes
+- Real-time rendering of preview window
   ```sh
+  # fzf can render preview window before the command completes
   fzf --preview 'sleep 1; for i in $(seq 100); do echo $i; sleep 0.01; done'
+
+  # Preview window can process ANSI escape sequence (CSI 2 J) for clearing the display
+  fzf --preview 'for i in $(seq 100000); do
+    (( i % 200 == 0 )) && printf "\033[2J"
+    echo "$i"
+    sleep 0.01
+  done'
+  ```
+- Updated `--color` option to support text styles
+  - `regular` / `bold` / `dim` / `underline` / `italic` / `reverse` / `blink`
+    ```sh
+    # * Set -1 to keep the original color
+    # * Multiple style attributes can be combined
+    # * Italic style may not be supported by some terminals
+    rg --line-number --no-heading --color=always "" |
+      fzf --ansi --prompt "Rg: " \
+          --color fg+:italic,hl:underline:-1,hl+:underline:reverse:-1 \
+          --color pointer:reverse,prompt:reverse,input:159 \
+          --pointer '  '
+    ```
+- To indicate if `--multi` mode is enabled, fzf will print the number of
+  selected items even when no item is selected
+  ```sh
+  seq 100 | fzf
+    # 100/100
+  seq 100 | fzf --multi
+    # 100/100 (0)
+  seq 100 | fzf --multi 5
+    # 100/100 (0/5)
   ```
 
 0.23.1

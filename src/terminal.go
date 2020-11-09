@@ -653,7 +653,7 @@ func (t *Terminal) displayWidth(runes []rune) int {
 }
 
 const (
-	minWidth  = 16
+	minWidth  = 4
 	minHeight = 4
 
 	maxDisplayWidthCalc = 1024
@@ -801,17 +801,19 @@ func (t *Terminal) resizeWindows() {
 			t.pwindow = t.tui.NewWindow(y, x, pwidth, pheight, true, noBorder)
 		}
 		verticalPad := 2
+		minPreviewHeight := 3
 		if t.preview.border == tui.BorderNone {
 			verticalPad = 0
+			minPreviewHeight = 1
 		}
 		switch t.preview.position {
 		case posUp:
-			pheight := calculateSize(height, t.preview.size, minHeight, 3, verticalPad)
+			pheight := calculateSize(height, t.preview.size, minHeight, minPreviewHeight, verticalPad)
 			t.window = t.tui.NewWindow(
 				marginInt[0]+pheight, marginInt[3], width, height-pheight, false, noBorder)
 			createPreviewWindow(marginInt[0], marginInt[3], width, pheight)
 		case posDown:
-			pheight := calculateSize(height, t.preview.size, minHeight, 3, verticalPad)
+			pheight := calculateSize(height, t.preview.size, minHeight, minPreviewHeight, verticalPad)
 			t.window = t.tui.NewWindow(
 				marginInt[0], marginInt[3], width, height-pheight, false, noBorder)
 			createPreviewWindow(marginInt[0]+height-pheight, marginInt[3], width, pheight)
@@ -1254,6 +1256,7 @@ func (t *Terminal) renderPreviewText(unchanged bool) {
 	}
 	var ansi *ansiState
 	for _, line := range t.previewer.lines {
+		line = strings.TrimSuffix(line, "\n")
 		if lineNo >= height || t.pwindow.Y() == height-1 && t.pwindow.X() > 0 {
 			t.previewed.filled = true
 			break
@@ -1284,6 +1287,7 @@ func (t *Terminal) renderPreviewText(unchanged bool) {
 			if unchanged && lineNo == 0 {
 				break
 			}
+			t.pwindow.Fill("\n")
 		}
 		lineNo++
 	}

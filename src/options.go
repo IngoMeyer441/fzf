@@ -83,7 +83,7 @@ const usage = `usage: fzf [options]
     --preview=COMMAND     Command to preview highlighted line ({})
     --preview-window=OPT  Preview window layout (default: right:50%)
                           [up|down|left|right][:SIZE[%]]
-                          [:[no]wrap][:[no]cycle][:[no]hidden]
+                          [:[no]wrap][:[no]cycle][:[no]follow][:[no]hidden]
                           [:rounded|sharp|noborder]
                           [:+SCROLL[-OFFSET]]
                           [:default]
@@ -169,6 +169,7 @@ type previewOpts struct {
 	hidden   bool
 	wrap     bool
 	cycle    bool
+	follow   bool
 	border   tui.BorderShape
 }
 
@@ -231,7 +232,7 @@ type Options struct {
 }
 
 func defaultPreviewOpts(command string) previewOpts {
-	return previewOpts{command, posRight, sizeSpec{50, true}, "", false, false, false, tui.BorderRounded}
+	return previewOpts{command, posRight, sizeSpec{50, true}, "", false, false, false, false, tui.BorderRounded}
 }
 
 func defaultOptions() *Options {
@@ -735,7 +736,7 @@ func init() {
 	// Backreferences are not supported.
 	// "~!@#$%^&*;/|".each_char.map { |c| Regexp.escape(c) }.map { |c| "#{c}[^#{c}]*#{c}" }.join('|')
 	executeRegexp = regexp.MustCompile(
-		`(?si)[:+](execute(?:-multi|-silent)?|reload|preview):.+|[:+](execute(?:-multi|-silent)?|reload|preview)(\([^)]*\)|\[[^\]]*\]|~[^~]*~|![^!]*!|@[^@]*@|\#[^\#]*\#|\$[^\$]*\$|%[^%]*%|\^[^\^]*\^|&[^&]*&|\*[^\*]*\*|;[^;]*;|/[^/]*/|\|[^\|]*\|)`)
+		`(?si)[:+](execute(?:-multi|-silent)?|reload|preview|change-prompt):.+|[:+](execute(?:-multi|-silent)?|reload|preview|change-prompt)(\([^)]*\)|\[[^\]]*\]|~[^~]*~|![^!]*!|@[^@]*@|\#[^\#]*\#|\$[^\$]*\$|%[^%]*%|\^[^\^]*\^|&[^&]*&|\*[^\*]*\*|;[^;]*;|/[^/]*/|\|[^\|]*\|)`)
 }
 
 func parseKeymap(keymap map[int][]action, str string) {
@@ -749,6 +750,8 @@ func parseKeymap(keymap map[int][]action, str string) {
 			prefix = symbol + "reload"
 		} else if strings.HasPrefix(src[1:], "preview") {
 			prefix = symbol + "preview"
+		} else if strings.HasPrefix(src[1:], "change-prompt") {
+			prefix = symbol + "change-prompt"
 		} else if src[len(prefix)] == '-' {
 			c := src[len(prefix)+1]
 			if c == 's' || c == 'S' {
@@ -922,6 +925,8 @@ func parseKeymap(keymap map[int][]action, str string) {
 						offset = len("reload")
 					case actPreview:
 						offset = len("preview")
+					case actChangePrompt:
+						offset = len("change-prompt")
 					case actExecuteSilent:
 						offset = len("execute-silent")
 					case actExecuteMulti:
@@ -961,6 +966,8 @@ func isExecuteAction(str string) actionType {
 		return actReload
 	case "preview":
 		return actPreview
+	case "change-prompt":
+		return actChangePrompt
 	case "execute":
 		return actExecute
 	case "execute-silent":
@@ -1075,6 +1082,10 @@ func parsePreviewWindow(opts *previewOpts, input string) {
 			opts.border = tui.BorderSharp
 		case "noborder":
 			opts.border = tui.BorderNone
+		case "follow":
+			opts.follow = true
+		case "nofollow":
+			opts.follow = false
 		default:
 			if sizeRegex.MatchString(token) {
 				opts.size = parseSize(token, 99, "window size")

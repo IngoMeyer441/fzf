@@ -261,7 +261,6 @@ _fzf_complete() {
   if [ -n "$matches" ]; then
     LBUFFER="$lbuf$matches"
   fi
-  zle reset-prompt
   command rm -f "$fifo"
 }
 
@@ -367,6 +366,7 @@ fzf-completion() {
     if [ "$current_trigger" = "$trigger_general" ]; then
       if eval "type _fzf_complete_${cmd} > /dev/null"; then
         prefix="$prefix" eval _fzf_complete_${cmd} ${(q)lbuf}
+        zle reset-prompt
       elif [ ${d_cmds[(i)$cmd]} -le ${#d_cmds} ]; then
         _fzf_dir_completion "$prefix" "$lbuf"
       else

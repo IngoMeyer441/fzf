@@ -340,13 +340,6 @@ fzf-completion() {
 
   lbuf=$LBUFFER
   tail=${LBUFFER:$(( ${#LBUFFER} - ${#trigger_general} ))}
-  reversed_head=$(echo ${tokens[-1]:0:${#trigger_general}} | rev)
-  # Kill completion (do not require trigger sequence)
-  if [ "$cmd" = kill -a ${LBUFFER[-1]} = ' ' ]; then
-    tail=$trigger_general
-    tokens+=$trigger_general
-    lbuf="$lbuf$trigger_general"
-  fi
 
   # Trigger sequence given
   if [ ${#tokens} -gt 1 ] && ( (( ${triggers[(Ie)${tail}]} )) || (( ${triggers[(Ie)${reversed_head}]} )) ); then

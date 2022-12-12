@@ -315,8 +315,10 @@ const (
 	actPreviewPageDown
 	actPreviewHalfPageUp
 	actPreviewHalfPageDown
-	actPreviousHistory
+	actPrevHistory
+	actPrevSelected
 	actNextHistory
+	actNextSelected
 	actExecute
 	actExecuteSilent
 	actExecuteMulti // Deprecated
@@ -602,7 +604,7 @@ func NewTerminal(opts *Options, eventBox *util.EventBox) *Terminal {
 	t.pointerEmpty = strings.Repeat(" ", t.pointerLen)
 	t.markerEmpty = strings.Repeat(" ", t.markerLen)
 	t.borderLabel, t.borderLabelLen = t.ansiLabelPrinter(opts.BorderLabel.label, &tui.ColBorderLabel, false)
-	t.previewLabel, t.previewLabelLen = t.ansiLabelPrinter(opts.PreviewLabel.label, &tui.ColBorderLabel, false)
+	t.previewLabel, t.previewLabelLen = t.ansiLabelPrinter(opts.PreviewLabel.label, &tui.ColPreviewLabel, false)
 	if opts.Separator == nil || len(*opts.Separator) > 0 {
 		bar := "─"
 		if opts.Separator != nil {
@@ -2859,7 +2861,7 @@ func (t *Terminal) Loop() {
 				prefix := copySlice(t.input[:t.cx])
 				t.input = append(append(prefix, event.Char), t.input[t.cx:]...)
 				t.cx++
-			case actPreviousHistory:
+			case actPrevHistory:
 				if t.history != nil {
 					t.history.override(string(t.input))
 					t.input = trimQuery(t.history.previous())
@@ -3014,6 +3016,22 @@ func (t *Terminal) Loop() {
 					// Adjust scroll offset
 					if t.hasPreviewWindow() && currentPreviewOpts.scroll != t.previewOpts.scroll {
 						scrollPreviewTo(t.evaluateScrollOffset())
+					}
+				}
+			case actNextSelected, actPrevSelected:
+				if len(t.selected) > 0 {
+					total := t.merger.Length()
+					for i := 1; i < total; i++ {
+						y := (t.cy + i) % total
+						if t.layout == layoutDefault && a.t == actNextSelected ||
+							t.layout != layoutDefault && a.t == actPrevSelected {
+							y = (t.cy - i + total) % total
+						}
+						if _, found := t.selected[t.merger.Get(y).item.Index()]; found {
+							t.vset(y)
+							req(reqList)
+							break
+						}
 					}
 				}
 			}

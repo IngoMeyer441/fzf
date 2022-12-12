@@ -845,6 +845,8 @@ func parseTheme(defaultTheme *tui.ColorTheme, str string) *tui.ColorTheme {
 				mergeAttr(&theme.Separator)
 			case "label":
 				mergeAttr(&theme.BorderLabel)
+			case "preview-label":
+				mergeAttr(&theme.PreviewLabel)
 			case "prompt":
 				mergeAttr(&theme.Prompt)
 			case "spinner":
@@ -1058,10 +1060,14 @@ func parseKeymap(keymap map[tui.Event][]*action, str string) {
 				appendAction(actHalfPageUp)
 			case "half-page-down":
 				appendAction(actHalfPageDown)
-			case "previous-history":
-				appendAction(actPreviousHistory)
+			case "prev-history", "previous-history":
+				appendAction(actPrevHistory)
 			case "next-history":
 				appendAction(actNextHistory)
+			case "prev-selected":
+				appendAction(actPrevSelected)
+			case "next-selected":
+				appendAction(actNextSelected)
 			case "toggle-preview":
 				appendAction(actTogglePreview)
 			case "toggle-preview-wrap":
@@ -1803,7 +1809,7 @@ func postProcessOptions(opts *Options) {
 	// Default actions for CTRL-N / CTRL-P when --history is set
 	if opts.History != nil {
 		if _, prs := opts.Keymap[tui.CtrlP.AsEvent()]; !prs {
-			opts.Keymap[tui.CtrlP.AsEvent()] = toActions(actPreviousHistory)
+			opts.Keymap[tui.CtrlP.AsEvent()] = toActions(actPrevHistory)
 		}
 		if _, prs := opts.Keymap[tui.CtrlN.AsEvent()]; !prs {
 			opts.Keymap[tui.CtrlN.AsEvent()] = toActions(actNextHistory)

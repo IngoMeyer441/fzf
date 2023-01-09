@@ -307,6 +307,22 @@ const (
 	BorderRight
 )
 
+func (s BorderShape) HasRight() bool {
+	switch s {
+	case BorderNone, BorderLeft, BorderTop, BorderBottom, BorderHorizontal: // No right
+		return false
+	}
+	return true
+}
+
+func (s BorderShape) HasTop() bool {
+	switch s {
+	case BorderNone, BorderLeft, BorderRight, BorderBottom, BorderVertical: // No top
+		return false
+	}
+	return true
+}
+
 type BorderStyle struct {
 	shape       BorderShape
 	horizontal  rune
@@ -431,7 +447,7 @@ type FullscreenRenderer struct {
 	mouse        bool
 	forceBlack   bool
 	prevDownTime time.Time
-	clickY       []int
+	clicks       [][2]int
 }
 
 func NewFullscreenRenderer(theme *ColorTheme, forceBlack bool, mouse bool) Renderer {
@@ -440,7 +456,7 @@ func NewFullscreenRenderer(theme *ColorTheme, forceBlack bool, mouse bool) Rende
 		mouse:        mouse,
 		forceBlack:   forceBlack,
 		prevDownTime: time.Unix(0, 0),
-		clickY:       []int{}}
+		clicks:       [][2]int{}}
 	return r
 }
 

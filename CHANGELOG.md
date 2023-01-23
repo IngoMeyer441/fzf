@@ -1,6 +1,15 @@
 CHANGELOG
 =========
 
+0.37.0
+------
+- New actions
+    - `change-border-label`
+    - `change-preview-label`
+    - `transform-border-label`
+    - `transform-preview-label`
+- Bug fixes and improvements
+
 0.36.0
 ------
 - Added `--listen=HTTP_PORT` option to start HTTP server. It allows external
@@ -92,6 +101,7 @@ CHANGELOG
   for `--border-label`)
 - Better support for (Windows) terminals where each box-drawing character
   takes 2 columns. Set `RUNEWIDTH_EASTASIAN` environment variable to `1`.
+    - On Vim, the variable will be automatically set if `&ambiwidth` is `double`
 - Behavior changes
     - fzf will always execute the preview command if the command template
       contains `{q}` even when it's empty. If you prefer the old behavior,

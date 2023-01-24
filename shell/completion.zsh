@@ -341,6 +341,7 @@ fzf-completion() {
 
   lbuf=$LBUFFER
   tail=${LBUFFER:$(( ${#LBUFFER} - ${#trigger_general} ))}
+  reversed_head=$(echo ${tokens[-1]:0:${#trigger_general}} | rev)
 
   # Trigger sequence given
   if [ ${#tokens} -gt 1 ] && ( (( ${triggers[(Ie)${tail}]} )) || (( ${triggers[(Ie)${reversed_head}]} )) ); then

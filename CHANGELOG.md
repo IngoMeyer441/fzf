@@ -1,6 +1,24 @@
 CHANGELOG
 =========
 
+0.38.0
+------
+- New actions
+    - `become(...)` - Replace the current fzf process with the specified
+      command using `execve(2)` system call. This action enables a simpler
+      alternative to using `--expect` and checking the output in the wrapping
+      script.
+      ```sh
+      # Open selected files in different editors
+      fzf --multi --bind 'enter:become($EDITOR {+}),ctrl-n:become(nano {+})'
+      ```
+        - This action is not supported on Windows
+    - `show-preview`
+    - `hide-preview`
+- Bug fixes
+    - `--preview-window 0,hidden` should not execute the preview command until
+      `toggle-preview` action is triggered
+
 0.37.0
 ------
 - Added a way to customize the separator of inline info

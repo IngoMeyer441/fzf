@@ -251,17 +251,31 @@ _fzf_fasd_path_completion() {
       -m \
       --tiebreak=end,index \
       --preview '\
-          sed \"s%~%\${HOME}%\" <<< {} | \
-          xargs exa \
-              --all \
-              --all \
-              --binary \
-              --color=always \
-              --color-scale \
-              --git \
-              --group \
-              --group-directories-first \
-              --long\
+        sed \"s%~%\${HOME}%\" <<< {1} | \
+        xargs \
+          sh \
+            -c \" \
+              [ -d \\\"\\\$*\\\" ] && \
+                exa \
+                  --all \
+                  --all \
+                  --binary \
+                  --color=always \
+                  --color-scale \
+                  --git \
+                  --group \
+                  --group-directories-first \
+                  --long \
+                  -- \
+                  \\\"\\\$*\\\" \
+              || \
+                bat \
+                  --color=always \
+                  --pager=never \
+                  -- \
+                  \\\"\\\$*\\\" \
+            \" \
+            -- \
       ' \
     " \
     "" \
@@ -277,17 +291,12 @@ _fzf_fasd_file_completion() {
       -m \
       --tiebreak=end,index \
       --preview '\
-          sed \"s%~%\${HOME}%\" <<< {} | \
-          xargs exa \
-              --all \
-              --all \
-              --binary \
+          sed \"s%~%\${HOME}%\" <<< {1} | \
+          xargs \
+            bat \
               --color=always \
-              --color-scale \
-              --git \
-              --group \
-              --group-directories-first \
-              --long\
+              --pager=never \
+              -- \
       ' \
     " \
     "" \
@@ -303,17 +312,19 @@ _fzf_fasd_dir_completion() {
       -m \
       --tiebreak=end,index \
       --preview '\
-          sed \"s%~%\${HOME}%\" <<< {} | \
-          xargs exa \
-              --all \
-              --all \
-              --binary \
-              --color=always \
-              --color-scale \
-              --git \
-              --group \
-              --group-directories-first \
-              --long\
+        sed \"s%~%\${HOME}%\" <<< {1} | \
+        xargs \
+          exa \
+            --all \
+            --all \
+            --binary \
+            --color=always \
+            --color-scale \
+            --git \
+            --group \
+            --group-directories-first \
+            --long \
+            -- \
       ' \
     " \
     "/" \

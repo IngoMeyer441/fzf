@@ -233,13 +233,70 @@ __fzf_generic_path_completion() {
 }
 
 _fzf_path_completion() {
-  __fzf_generic_path_completion "$1" "$2" _fzf_compgen_path \
-    "-m" "" " "
+  __fzf_generic_path_completion \
+    "$1" \
+    "$2" \
+    _fzf_compgen_path \
+    "\
+      -m \
+      --tiebreak=end,index \
+      --preview '\
+        sed \"s%~%\${HOME}%\" <<< {1} | \
+        xargs \
+          sh \
+            -c \" \
+              [ -d \\\"\\\$*\\\" ] && \
+                exa \
+                  --all \
+                  --all \
+                  --binary \
+                  --color=always \
+                  --color-scale \
+                  --git \
+                  --group \
+                  --group-directories-first \
+                  --long \
+                  -- \
+                  \\\"\\\$*\\\" \
+              || \
+                bat \
+                  --color=always \
+                  --pager=never \
+                  -- \
+                  \\\"\\\$*\\\" \
+            \" \
+            -- \
+      ' \
+    " \
+    "" \
+    " "
 }
 
 _fzf_dir_completion() {
-  __fzf_generic_path_completion "$1" "$2" _fzf_compgen_dir \
-    "" "/" ""
+  __fzf_generic_path_completion \
+    "$1" \
+    "$2" \
+    _fzf_compgen_dir \
+    "\
+      --tiebreak=end,index \
+      --preview '\
+        sed \"s%~%\${HOME}%\" <<< {1} | \
+        xargs \
+          exa \
+            --all \
+            --all \
+            --binary \
+            --color=always \
+            --color-scale \
+            --git \
+            --group \
+            --group-directories-first \
+            --long \
+            -- \
+      ' \
+    " \
+    "/" \
+    ""
 }
 
 _fzf_fasd_path_completion() {

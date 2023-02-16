@@ -96,11 +96,18 @@ fi
 if ! declare -f _fzf_compgen_fasd_path > /dev/null; then
   _fzf_compgen_fasd_path() {
     if [[ "$(uname)" == "Linux" ]]; then
-      command fasd -Ral | sed "s%^${PWD}/%%" | xargs ls -d --color=always 2>/dev/null
+      command fasd -Ral | \
+        sed "s%^${PWD}/%%" | \
+        xargs ls -d --color=always 2>/dev/null | \
+        sed -E "s%^(\[[[:digit:];]+m)?${HOME}%\1~%"
     elif command which gnu_ls >/dev/null 2>&1; then
-      command fasd -Ral | sed "s%^${PWD}/%%" | xargs gnu_ls -d --color=always 2>/dev/null
+      command fasd -Ral | \
+        sed "s%^${PWD}/%%" | \
+        xargs gnu_ls -d --color=always 2>/dev/null | \
+        sed -E "s%^(\[[[:digit:];]+m)?${HOME}%\1~%"
     else
-      command fasd -Ral | sed "s%^${PWD}/%%"
+      command fasd -Ral | \
+        sed -e "s%^${PWD}/%%" -e "s%^${HOME}%~%"
     fi
   }
 fi
@@ -108,11 +115,18 @@ fi
 if ! declare -f _fzf_compgen_fasd_file > /dev/null; then
   _fzf_compgen_fasd_file() {
     if [[ "$(uname)" == "Linux" ]]; then
-      command fasd -Rfl | sed "s%^${PWD}/%%" | xargs ls -d --color=always 2>/dev/null
+      command fasd -Rfl | \
+        sed "s%^${PWD}/%%" | \
+        xargs ls -d --color=always 2>/dev/null | \
+        sed -E "s%^(\[[[:digit:];]+m)?${HOME}%\1~%"
     elif command which gnu_ls >/dev/null 2>&1; then
-      command fasd -Rfl | sed "s%^${PWD}/%%" | xargs gnu_ls -d --color=always 2>/dev/null
+      command fasd -Rfl | \
+        sed "s%^${PWD}/%%" | \
+        xargs gnu_ls -d --color=always 2>/dev/null | \
+        sed -E "s%^(\[[[:digit:];]+m)?${HOME}%\1~%"
     else
-      command fasd -Rfl | sed "s%^${PWD}/%%"
+      command fasd -Rfl | \
+        sed -e "s%^${PWD}/%%" -e "s%^${HOME}%~%"
     fi
   }
 fi
@@ -120,11 +134,18 @@ fi
 if ! declare -f _fzf_compgen_fasd_dir > /dev/null; then
   _fzf_compgen_fasd_dir() {
     if [[ "$(uname)" == "Linux" ]]; then
-      command fasd -Rdl | sed "s%^${PWD}/%%" | xargs ls -d --color=always 2>/dev/null
+      command fasd -Rdl | \
+        sed "s%^${PWD}/%%" | \
+        xargs ls -d --color=always 2>/dev/null | \
+        sed -E "s%^(\[[[:digit:];]+m)?${HOME}%\1~%"
     elif command which gnu_ls >/dev/null 2>&1; then
-      command fasd -Rdl | sed "s%^${PWD}/%%" | xargs gnu_ls -d --color=always 2>/dev/null
+      command fasd -Rdl | \
+        sed "s%^${PWD}/%%" | \
+        xargs gnu_ls -d --color=always 2>/dev/null | \
+        sed -E "s%^(\[[[:digit:];]+m)?${HOME}%\1~%"
     else
-      command fasd -Rdl | sed "s%^${PWD}/%%"
+      command fasd -Rdl | \
+        sed -e "s%^${PWD}/%%" -e "s%^${HOME}%~%"
     fi
   }
 fi
@@ -182,7 +203,7 @@ __fzf_generic_path_completion() {
       [ "$dir" != "/" ] && dir="${dir/%\//}"
       matches=$(eval "$compgen $(printf %q "$dir")" | FZF_DEFAULT_OPTS="--height ${FZF_TMUX_HEIGHT:-40%} --reverse --bind=ctrl-z:ignore ${FZF_DEFAULT_OPTS-} ${FZF_COMPLETION_OPTS-}" __fzf_comprun "$cmd" ${(Q)${(Z+n+)fzf_opts}} -q "$leftover" | while read item; do
         item="${item%$suffix}$suffix"
-        echo -n "${(q)item} "
+        echo -n "${item} "
       done)
       matches=${matches% }
       if [ -n "$matches" ]; then

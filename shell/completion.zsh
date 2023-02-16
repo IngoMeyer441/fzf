@@ -95,7 +95,12 @@ fi
 
 if ! declare -f _fzf_compgen_fasd_path > /dev/null; then
   _fzf_compgen_fasd_path() {
-    if [[ "$(uname)" == "Linux" ]]; then
+    if command which exa >/dev/null 2>&1; then
+      command fasd -Ral | \
+        sed "s%^${PWD}/%%" | \
+        xargs exa -d --color=always 2>/dev/null | \
+        sed -E "s%^(\[[[:digit:];]+m)?${HOME}%\1~%"
+    elif [[ "$(uname)" == "Linux" ]]; then
       command fasd -Ral | \
         sed "s%^${PWD}/%%" | \
         xargs ls -d --color=always 2>/dev/null | \
@@ -114,7 +119,12 @@ fi
 
 if ! declare -f _fzf_compgen_fasd_file > /dev/null; then
   _fzf_compgen_fasd_file() {
-    if [[ "$(uname)" == "Linux" ]]; then
+    if command which exa >/dev/null 2>&1; then
+      command fasd -Rfl | \
+        sed "s%^${PWD}/%%" | \
+        xargs exa -d --color=always 2>/dev/null | \
+        sed -E "s%^(\[[[:digit:];]+m)?${HOME}%\1~%"
+    elif [[ "$(uname)" == "Linux" ]]; then
       command fasd -Rfl | \
         sed "s%^${PWD}/%%" | \
         xargs ls -d --color=always 2>/dev/null | \
@@ -133,7 +143,12 @@ fi
 
 if ! declare -f _fzf_compgen_fasd_dir > /dev/null; then
   _fzf_compgen_fasd_dir() {
-    if [[ "$(uname)" == "Linux" ]]; then
+    if command which exa >/dev/null 2>&1; then
+      command fasd -Rdl | \
+        sed "s%^${PWD}/%%" | \
+        xargs exa -d --color=always 2>/dev/null | \
+        sed -E "s%^(\[[[:digit:];]+m)?${HOME}%\1~%"
+    elif [[ "$(uname)" == "Linux" ]]; then
       command fasd -Rdl | \
         sed "s%^${PWD}/%%" | \
         xargs ls -d --color=always 2>/dev/null | \
@@ -228,18 +243,81 @@ _fzf_dir_completion() {
 }
 
 _fzf_fasd_path_completion() {
-  __fzf_generic_path_completion "$1" "$2" _fzf_compgen_fasd_path \
-    "-m --tiebreak=end,index" "" " "
+  __fzf_generic_path_completion \
+    "$1" \
+    "$2" \
+    _fzf_compgen_fasd_path \
+    "\
+      -m \
+      --tiebreak=end,index \
+      --preview '\
+          sed \"s%~%\${HOME}%\" <<< {} | \
+          xargs exa \
+              --all \
+              --all \
+              --binary \
+              --color=always \
+              --color-scale \
+              --git \
+              --group \
+              --group-directories-first \
+              --long\
+      ' \
+    " \
+    "" \
+    " "
 }
 
 _fzf_fasd_file_completion() {
-  __fzf_generic_path_completion "$1" "$2" _fzf_compgen_fasd_file \
-    "-m --tiebreak=end,index" "" " "
+  __fzf_generic_path_completion \
+    "$1" \
+    "$2" \
+    _fzf_compgen_fasd_file \
+    "\
+      -m \
+      --tiebreak=end,index \
+      --preview '\
+          sed \"s%~%\${HOME}%\" <<< {} | \
+          xargs exa \
+              --all \
+              --all \
+              --binary \
+              --color=always \
+              --color-scale \
+              --git \
+              --group \
+              --group-directories-first \
+              --long\
+      ' \
+    " \
+    "" \
+    " "
 }
 
 _fzf_fasd_dir_completion() {
-  __fzf_generic_path_completion "$1" "$2" _fzf_compgen_fasd_dir \
-    "--tiebreak=end,index" "/" ""
+  __fzf_generic_path_completion \
+    "$1" \
+    "$2" \
+    _fzf_compgen_fasd_dir \
+    "\
+      -m \
+      --tiebreak=end,index \
+      --preview '\
+          sed \"s%~%\${HOME}%\" <<< {} | \
+          xargs exa \
+              --all \
+              --all \
+              --binary \
+              --color=always \
+              --color-scale \
+              --git \
+              --group \
+              --group-directories-first \
+              --long\
+      ' \
+    " \
+    "/" \
+    ""
 }
 
 _fzf_feed_fifo() (

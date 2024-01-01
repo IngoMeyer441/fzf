@@ -979,7 +979,7 @@ const (
 
 func init() {
 	executeRegexp = regexp.MustCompile(
-		`(?si)[:+](become|execute(?:-multi|-silent)?|reload(?:-sync)?|preview|(?:change|transform)-(?:header|query|prompt|border-label|preview-label)|change-preview-window|change-preview|(?:re|un)bind|pos|put)`)
+		`(?si)[:+](become|execute(?:-multi|-silent)?|reload(?:-sync)?|preview|(?:change|transform)-(?:header|query|prompt|border-label|preview-label)|transform|change-preview-window|change-preview|(?:re|un)bind|pos|put)`)
 	splitRegexp = regexp.MustCompile("[,:]+")
 	actionNameRegexp = regexp.MustCompile("(?i)^[a-z-]+")
 }
@@ -1086,7 +1086,7 @@ func parseActionList(masked string, original string, prevActions []*action, putA
 		case "backward-delete-char":
 			appendAction(actBackwardDeleteChar)
 		case "backward-delete-char/eof":
-			appendAction(actBackwardDeleteCharEOF)
+			appendAction(actBackwardDeleteCharEof)
 		case "backward-word":
 			appendAction(actBackwardWord)
 		case "clear-screen":
@@ -1094,7 +1094,7 @@ func parseActionList(masked string, original string, prevActions []*action, putA
 		case "delete-char":
 			appendAction(actDeleteChar)
 		case "delete-char/eof":
-			appendAction(actDeleteCharEOF)
+			appendAction(actDeleteCharEof)
 		case "deselect":
 			appendAction(actDeselect)
 		case "end-of-line":
@@ -1141,6 +1141,10 @@ func parseActionList(masked string, original string, prevActions []*action, putA
 			appendAction(actToggleTrack)
 		case "toggle-header":
 			appendAction(actToggleHeader)
+		case "show-header":
+			appendAction(actShowHeader)
+		case "hide-header":
+			appendAction(actHideHeader)
 		case "track":
 			appendAction(actTrack)
 		case "select":
@@ -1213,7 +1217,7 @@ func parseActionList(masked string, original string, prevActions []*action, putA
 			appendAction(actDisableSearch)
 		case "put":
 			if putAllowed {
-				appendAction(actRune)
+				appendAction(actChar)
 			} else {
 				exit("unable to put non-printable character")
 			}
@@ -1333,6 +1337,8 @@ func isExecuteAction(str string) actionType {
 		return actExecuteMulti
 	case "put":
 		return actPut
+	case "transform":
+		return actTransform
 	case "transform-border-label":
 		return actTransformBorderLabel
 	case "transform-preview-label":

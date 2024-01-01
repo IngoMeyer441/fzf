@@ -3,6 +3,23 @@ CHANGELOG
 
 0.45.0
 ------
+- Added `transform` action to conditionally perform a series of actions
+  ```sh
+  # Disallow selecting an empty line
+  echo -e "1. Hello\n2. Goodbye\n\n3. Exit" |
+    fzf --height '~100%' --reverse --header 'Select one' \
+        --bind 'enter:transform:[[ -n {} ]] && echo accept || echo "change-header:Invalid selection"'
+
+  # Move cursor past the empty line
+  echo -e "1. Hello\n2. Goodbye\n\n3. Exit" |
+    fzf --height '~100%' --reverse --header 'Select one' \
+        --bind 'enter:transform:[[ -n {} ]] && echo accept || echo "change-header:Invalid selection"' \
+        --bind 'focus:transform:[[ -n {} ]] && exit; [[ {fzf:action} =~ up$ ]] && echo up || echo down'
+  ```
+- Added placeholder expressions
+    - `{fzf:action}` - The name of the last action performed
+    - `{fzf:prompt}` - Prompt string (including ANSI color codes)
+    - `{fzf:query}` - Synonym for `{q}`
 - Added support for negative height
   ```sh
   # Terminal height minus 1, so you can still see the command line
@@ -19,6 +36,7 @@ CHANGELOG
     ```sh
     export FZF_CTRL_R_OPTS='--bind "enter:become:if [[ -n {} ]]; then echo {}; else echo {q}; fi"'
     ```
+- Added `show-header` and `hide-header` actions
 - Bug fixes
 
 0.44.1

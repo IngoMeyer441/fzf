@@ -1,6 +1,11 @@
 CHANGELOG
 =========
 
+0.46.0 (WIP)
+------
+- Added `result` event that is triggered when the filtering for the current query is complete and the result list is ready.
+- Bug fixes
+
 0.45.0
 ------
 - Added `transform` action to conditionally perform a series of actions
@@ -15,6 +20,14 @@ CHANGELOG
     fzf --height '~100%' --reverse --header 'Select one' \
         --bind 'enter:transform:[[ -n {} ]] && echo accept || echo "change-header:Invalid selection"' \
         --bind 'focus:transform:[[ -n {} ]] && exit; [[ {fzf:action} =~ up$ ]] && echo up || echo down'
+
+  # A single key binding to toggle between modes
+  fd --type file |
+    fzf --prompt 'Files> ' \
+        --header 'CTRL-T: Switch between Files/Directories' \
+        --bind 'ctrl-t:transform:[[ ! {fzf:prompt} =~ Files ]] &&
+                  echo "change-prompt(Files> )+reload(fd --type file)" ||
+                  echo "change-prompt(Directories> )+reload(fd --type directory)"'
   ```
 - Added placeholder expressions
     - `{fzf:action}` - The name of the last action performed
@@ -32,9 +45,13 @@ CHANGELOG
   # You can make CTRL-R paste the current query when there's no match
   export FZF_CTRL_R_OPTS='--bind enter:accept-or-print-query'
   ```
-  - Note that this new action isn't fundamentally different from the following `become` binding. `become` is apparently more versatile but it's not available on Windows.
+  - Note that there are alternative ways to implement the same strategy
     ```sh
-    export FZF_CTRL_R_OPTS='--bind "enter:become:if [[ -n {} ]]; then echo {}; else echo {q}; fi"'
+    # 'become' is apparently more versatile but it's not available on Windows.
+    export FZF_CTRL_R_OPTS='--bind "enter:become:if [ -z {} ]; then echo {q}; else echo {}; fi"'
+
+    # Using the new 'transform' action
+    export FZF_CTRL_R_OPTS='--bind "enter:transform:[ -z {} ] && echo print-query || echo accept"'
     ```
 - Added `show-header` and `hide-header` actions
 - Bug fixes

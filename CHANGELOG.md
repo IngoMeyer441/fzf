@@ -3,7 +3,41 @@ CHANGELOG
 
 0.46.0 (WIP)
 ------
-- Added `result` event that is triggered when the filtering for the current query is complete and the result list is ready.
+- Added two new events
+    - `result` - triggered when the filtering for the current query is complete and the result list is ready
+    - `resize` - triggered when the terminal size is changed
+- fzf now exports the following environment variables to the child processes
+  | Variable           | Description                                                 |
+  | ---                | ---                                                         |
+  | `FZF_LINES`        | Number of lines fzf takes up excluding padding and margin   |
+  | `FZF_COLUMNS`      | Number of columns fzf takes up excluding padding and margin |
+  | `FZF_TOTAL_COUNT`  | Total number of items                                       |
+  | `FZF_MATCH_COUNT`  | Number of matched items                                     |
+  | `FZF_SELECT_COUNT` | Number of selected items                                    |
+  | `FZF_QUERY`        | Current query string                                        |
+  | `FZF_PROMPT`       | Prompt string                                               |
+  | `FZF_ACTION`       | The name of the last action performed                       |
+  - This allows you to write sophisticated transformations like so
+    ```sh
+    # Script to dynamically resize the preview window
+    transformer='
+      # 1 line for info, another for prompt, and 2 more lines for preview window border
+      lines=$(( FZF_LINES - FZF_MATCH_COUNT - 4 ))
+      if [[ $FZF_MATCH_COUNT -eq 0 ]]; then
+        echo "change-preview-window:hidden"
+      elif [[ $lines -gt 3 ]]; then
+        echo "change-preview-window:$lines"
+      elif [[ $FZF_PREVIEW_LINES -ne 3 ]]; then
+        echo "change-preview-window:3"
+      fi
+    '
+    seq 10000 | fzf --preview 'seq {} 10000' --preview-window up \
+                    --bind "result:transform:$transformer" \
+                    --bind "resize:transform:$transformer"
+    ```
+  - And we're phasing out `{fzf:prompt}` and `{fzf:action}`
+- Changed [mattn/go-runewidth](https://github.com/mattn/go-runewidth) dependency to [rivo/uniseg](https://github.com/rivo/uniseg) for accurate results
+    - Set `--ambidouble` if your terminal displays characters with East Asian Width Class Ambiguous (e.g. box-drawing characters for borders) as 2 columns
 - Bug fixes
 
 0.45.0
@@ -97,7 +131,7 @@ CHANGELOG
       # --transfer-mode=memory is the fastest option but if you want fzf to be able
       # to redraw the image on terminal resize or on 'change-preview-window',
       # you need to use --transfer-mode=stream.
-      kitty icat --clear --transfer-mode=memory --stdin=no --place=${FZF_PREVIEW_COLUMNS}x${FZF_PREVIEW_LINES}@0x0 {} | sed \$d
+      kitty icat --clear --transfer-mode=memory --unicode-placeholder --stdin=no --place=${FZF_PREVIEW_COLUMNS}x${FZF_PREVIEW_LINES}@0x0 {} | sed \$d
     else
       bat --color=always {}
     fi

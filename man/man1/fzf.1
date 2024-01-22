@@ -260,9 +260,8 @@ Draw border around the finder
 .br
 
 If you use a terminal emulator where each box-drawing character takes
-2 columns, try setting \fBRUNEWIDTH_EASTASIAN\fR environment variable to
-\fB0\fR or \fB1\fR. If the border is still not properly rendered, set
-\fB--no-unicode\fR.
+2 columns, try setting \fB--ambidouble\fR. If the border is still not properly
+rendered, set \fB--no-unicode\fR.
 
 .TP
 .BI "--border-label" [=LABEL]
@@ -312,6 +311,11 @@ the label. Label is printed on the top border line by default, add
 .B "--no-unicode"
 Use ASCII characters instead of Unicode drawing characters to draw borders,
 the spinner and the horizontal separator.
+
+.TP
+.B "--ambidouble"
+Set this option if your terminal displays characters with East Asian Width
+Class Ambiguous (e.g. box-drawing characters for borders) as 2 columns.
 
 .TP
 .BI "--margin=" MARGIN
@@ -592,8 +596,6 @@ Also,
 * \fB{n}\fR is replaced to the zero-based ordinal index of the current item.
   Use \fB{+n}\fR if you want all index numbers when multiple lines are selected.
 .br
-* \fB{fzf:action}\fR is replaced to to the name of the last action performed
-* \fB{fzf:prompt}\fR is replaced to to the prompt string
 
 Note that you can escape a placeholder pattern by prepending a backslash.
 
@@ -829,11 +831,13 @@ e.g.
      \fB# Start HTTP server on port 6266
      fzf --listen 6266
 
-     # Get program state in JSON format (experimental)
-     curl localhost:6266
-
      # Send action to the server
      curl -XPOST localhost:6266 -d 'reload(seq 100)+change-prompt(hundred> )'
+
+     # Get program state in JSON format (experimental)
+     # * Make sure NOT to access this endpoint from execute/transform actions
+     #   as it will result in a timeout
+     curl localhost:6266
 
      # Start HTTP server on port 6266 with remote connections allowed
      # * Listening on non-localhost address requires using an API key
@@ -900,6 +904,39 @@ of field index expressions.
 .br
 .BR .. "     All the fields"
 .br
+
+.SH ENVIRONMENT VARIABLES EXPORTED TO CHILD PROCESSES
+
+fzf exports the following environment variables to its child processes.
+
+.BR FZF_LINES "           Number of lines fzf takes up excluding padding and margin"
+.br
+.BR FZF_COLUMNS "         Number of columns fzf takes up excluding padding and margin"
+.br
+.BR FZF_TOTAL_COUNT "     Total number of items"
+.br
+.BR FZF_MATCH_COUNT "     Number of matched items"
+.br
+.BR FZF_SELECT_COUNT "    Number of selected items"
+.br
+.BR FZF_QUERY "           Current query string"
+.br
+.BR FZF_PROMPT "          Prompt string"
+.br
+.BR FZF_ACTION "          The name of the last action performed"
+.br
+.BR FZF_PORT "            Port number when --listen option is used"
+.br
+
+The following variables are additionally exported to the preview commands.
+
+.BR FZF_PREVIEW_TOP "     Top position of the preview window"
+.br
+.BR FZF_PREVIEW_LEFT "    Left position of the preview window"
+.br
+.BR FZF_PREVIEW_LINES "   Number of lines in the preview window"
+.br
+.BR FZF_PREVIEW_COLUMNS " Number of columns in the preview window"
 
 .SH EXTENDED SEARCH MODE
 
@@ -1074,6 +1111,13 @@ list is complete.
 e.g.
      \fB# Change the prompt to "loaded" when the input stream is complete
      (seq 10; sleep 1; seq 11 20) | fzf --prompt 'Loading> ' --bind 'load:change-prompt:Loaded> '\fR
+.RE
+\fIresize\fR
+.RS
+Triggered when the terminal size is changed.
+
+e.g.
+     \fBfzf --bind 'resize:transform-header:echo Resized: ${FZF_COLUMNS}x${FZF_LINES}'\fR
 .RE
 \fIresult\fR
 .RS

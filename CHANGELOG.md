@@ -1,7 +1,14 @@
 CHANGELOG
 =========
 
-0.46.0 (WIP)
+0.46.1
+------
+- Fixed Windows binaries
+- Downgraded Go version to 1.20 to support older versions of Windows
+    - https://tip.golang.org/doc/go1.21#windows
+- Updated [rivo/uniseg](https://github.com/rivo/uniseg) dependency to v0.4.5
+
+0.46.0
 ------
 - Added two new events
     - `result` - triggered when the filtering for the current query is complete and the result list is ready
@@ -37,7 +44,8 @@ CHANGELOG
     ```
   - And we're phasing out `{fzf:prompt}` and `{fzf:action}`
 - Changed [mattn/go-runewidth](https://github.com/mattn/go-runewidth) dependency to [rivo/uniseg](https://github.com/rivo/uniseg) for accurate results
-    - Set `--ambidouble` if your terminal displays characters with East Asian Width Class Ambiguous (e.g. box-drawing characters for borders) as 2 columns
+    - Set `--ambidouble` if your terminal displays ambiguous width characters (e.g. box-drawing characters for borders) as 2 columns
+    - `RUNEWIDTH_EASTASIAN=1` is still respected for backward compatibility, but it's recommended that you use this new option instead
 - Bug fixes
 
 0.45.0

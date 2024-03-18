@@ -219,10 +219,19 @@ __fzf_generic_path_completion() {
       leftover=${leftover/#\/}
       [ -z "$dir" ] && dir='.'
       [ "$dir" != "/" ] && dir="${dir/%\//}"
-      matches=$(eval "$compgen $(printf %q "$dir")" | FZF_DEFAULT_OPTS="--height ${FZF_TMUX_HEIGHT:-40%} --reverse --scheme=path --bind=ctrl-z:ignore ${FZF_DEFAULT_OPTS-} ${FZF_COMPLETION_OPTS-}" __fzf_comprun "$cmd" ${(Q)${(Z+n+)fzf_opts}} -q "$leftover" | while read item; do
-        item="${item%$suffix}$suffix"
-        echo -n "${item} "
-      done)
+      matches=$(
+        unset FZF_DEFAULT_COMMAND
+        export FZF_DEFAULT_OPTS="--height ${FZF_TMUX_HEIGHT:-40%} --reverse --scheme=path --bind=ctrl-z:ignore ${FZF_DEFAULT_OPTS-} ${FZF_COMPLETION_OPTS-}"
+        if declare -f "$compgen" > /dev/null; then
+          eval "$compgen $(printf %q "$dir")" | __fzf_comprun "$cmd" ${(Q)${(Z+n+)fzf_opts}} -q "$leftover"
+        else
+          [[ $compgen =~ dir ]] && walker=dir,follow || walker=file,dir,follow,hidden
+          __fzf_comprun "$cmd" ${(Q)${(Z+n+)fzf_opts}} -q "$leftover" --walker "$walker" --walker-root="$dir" < /dev/tty
+        fi | while read item; do
+          item="${item%$suffix}$suffix"
+          echo -n "${(q)item} "
+        done
+      )
       matches=${matches% }
       if [ -n "$matches" ]; then
         LBUFFER="$lbuf$matches$tail"

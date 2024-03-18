@@ -55,6 +55,9 @@ var actionTypeRegex *regexp.Regexp
 
 const clearCode string = "\x1b[2J"
 
+// Number of maximum focus events to process synchronously
+const maxFocusEvents = 10000
+
 func init() {
 	placeholder = regexp.MustCompile(`\\?(?:{[+sf]*[0-9,-.]*}|{q}|{fzf:(?:query|action|prompt)}|{\+?f?nf?})`)
 	whiteSuffix = regexp.MustCompile(`\s*$`)
@@ -1057,11 +1060,11 @@ func (t *Terminal) UpdateProgress(progress float32) {
 // UpdateList updates Merger to display the list
 func (t *Terminal) UpdateList(merger *Merger) {
 	t.mutex.Lock()
-	var prevIndex int32 = -1
+	prevIndex := minItem.Index()
 	reset := t.revision != merger.Revision()
 	if !reset && t.track != trackDisabled {
 		if t.merger.Length() > 0 {
-			prevIndex = t.merger.Get(t.cy).item.Index()
+			prevIndex = t.currentIndex()
 		} else if merger.Length() > 0 {
 			prevIndex = merger.First().item.Index()
 		}
@@ -3305,18 +3308,22 @@ func (t *Terminal) Loop() {
 		var doAction func(*action) bool
 		var doActions func(actions []*action) bool
 		doActions = func(actions []*action) bool {
-			currentIndex := t.currentIndex()
-			for _, action := range actions {
-				if !doAction(action) {
-					return false
+			for iter := 0; iter <= maxFocusEvents; iter++ {
+				currentIndex := t.currentIndex()
+				for _, action := range actions {
+					if !doAction(action) {
+						return false
+					}
 				}
-			}
 
-			if onFocus, prs := t.keymap[tui.Focus.AsEvent()]; prs {
-				if newIndex := t.currentIndex(); newIndex != currentIndex {
-					t.lastFocus = newIndex
-					return doActions(onFocus)
+				if onFocus, prs := t.keymap[tui.Focus.AsEvent()]; prs && iter < maxFocusEvents {
+					if newIndex := t.currentIndex(); newIndex != currentIndex {
+						t.lastFocus = newIndex
+						actions = onFocus
+						continue
+					}
 				}
+				break
 			}
 			return true
 		}
@@ -4114,7 +4121,7 @@ func (t *Terminal) constrain() {
 	// count of lines can be displayed
 	height := t.maxItems()
 
-	t.cy = util.Constrain(t.cy, 0, count-1)
+	t.cy = util.Constrain(t.cy, 0, util.Max(0, count-1))
 
 	minOffset := util.Max(t.cy-height+1, 0)
 	maxOffset := util.Max(util.Min(count-height, t.cy), 0)

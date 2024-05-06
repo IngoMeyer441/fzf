@@ -2693,6 +2693,13 @@ class TestGoFZF < TestBase
     end
   end
 
+  def test_change_preview_window_should_not_reset_change_preview
+    tmux.send_keys "#{FZF} --preview-window up,border-none --bind 'start:change-preview(echo hello)' --bind 'enter:change-preview-window(border-left)'", :Enter
+    tmux.until { |lines| assert_equal 'hello', lines[0] }
+    tmux.send_keys :Enter
+    tmux.until { |lines| assert_equal '│ hello', lines[0] }
+  end
+
   def test_change_preview_window_rotate
     tmux.send_keys "seq 100 | #{FZF} --preview-window left,border-none --preview 'echo hello' --bind '" \
       "a:change-preview-window(right|down|up|hidden|)'", :Enter
@@ -2968,6 +2975,13 @@ class TestGoFZF < TestBase
   def test_info_inline_right
     tmux.send_keys "#{FZF} --info=inline-right --bind 'start:reload:seq 100; sleep 10'", :Enter
     tmux.until { assert_match(%r{[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] 100/100}, _1[-1]) }
+  end
+
+  def test_info_inline_right_clearance
+    tmux.send_keys "seq 100000 | #{FZF} --info inline-right", :Enter
+    tmux.until { assert_match(%r{100000/100000}, _1[-1]) }
+    tmux.send_keys 'x'
+    tmux.until { assert_match(%r{     0/100000}, _1[-1]) }
   end
 
   def test_prev_next_selected

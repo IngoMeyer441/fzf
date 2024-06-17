@@ -286,6 +286,7 @@ type Terminal struct {
 	borderWidth        int
 	count              int
 	progress           int
+	hasStartActions    bool
 	hasResultActions   bool
 	hasFocusActions    bool
 	hasLoadActions     bool
@@ -311,6 +312,7 @@ type Terminal struct {
 	previewBox         *util.EventBox
 	eventBox           *util.EventBox
 	mutex              sync.Mutex
+	uiMutex            sync.Mutex
 	initFunc           func() error
 	prevLines          []itemLine
 	suppress           bool
@@ -318,7 +320,7 @@ type Terminal struct {
 	startChan          chan fitpad
 	killChan           chan bool
 	serverInputChan    chan []*action
-	serverOutputChan   chan string
+	keyChan            chan tui.Event
 	eventChan          chan tui.Event
 	slab               *util.Slab
 	theme              *tui.ColorTheme
@@ -362,7 +364,7 @@ const (
 	reqHeader
 	reqList
 	reqJump
-	reqRefresh
+	reqActivate
 	reqReinit
 	reqFullRedraw
 	reqResize
@@ -497,7 +499,6 @@ const (
 	actUnbind
 	actRebind
 	actBecome
-	actResponse
 	actShowHeader
 	actHideHeader
 )
@@ -686,7 +687,9 @@ func evaluateHeight(opts *Options, termHeight int) int {
 func NewTerminal(opts *Options, eventBox *util.EventBox, executor *util.Executor) (*Terminal, error) {
 	input := trimQuery(opts.Query)
 	var delay time.Duration
-	if opts.Tac {
+	if opts.Sync {
+		delay = 0
+	} else if opts.Tac {
 		delay = initialDelayTac
 	} else {
 		delay = initialDelay
@@ -711,7 +714,7 @@ func NewTerminal(opts *Options, eventBox *util.EventBox, executor *util.Executor
 		}
 	}
 	if fullscreen {
-		if tui.HasFullscreenRenderer() {
+		if !tui.IsLightRendererSupported() {
 			renderer = tui.NewFullscreenRenderer(opts.Theme, opts.Black, opts.Mouse)
 		} else {
 			renderer, err = tui.NewLightRenderer(ttyin, opts.Theme, opts.Black, opts.Mouse, opts.Tabstop, opts.ClearOnExit,
@@ -810,6 +813,7 @@ func NewTerminal(opts *Options, eventBox *util.EventBox, executor *util.Executor
 		ellipsis:           opts.Ellipsis,
 		ansi:               opts.Ansi,
 		tabstop:            opts.Tabstop,
+		hasStartActions:    false,
 		hasResultActions:   false,
 		hasFocusActions:    false,
 		hasLoadActions:     false,
@@ -832,6 +836,7 @@ func NewTerminal(opts *Options, eventBox *util.EventBox, executor *util.Executor
 		previewBox:         previewBox,
 		eventBox:           eventBox,
 		mutex:              sync.Mutex{},
+		uiMutex:            sync.Mutex{},
 		suppress:           true,
 		sigstop:            false,
 		slab:               util.MakeSlab(slab16Size, slab32Size),
@@ -839,8 +844,8 @@ func NewTerminal(opts *Options, eventBox *util.EventBox, executor *util.Executor
 		startChan:          make(chan fitpad, 1),
 		killChan:           make(chan bool),
 		serverInputChan:    make(chan []*action, 100),
-		serverOutputChan:   make(chan string),
-		eventChan:          make(chan tui.Event, 6), // (load + result + zero|one) | (focus) | (resize) | (GetChar)
+		keyChan:            make(chan tui.Event),
+		eventChan:          make(chan tui.Event, 6), // start | (load + result + zero|one) | (focus) | (resize)
 		tui:                renderer,
 		ttyin:              ttyin,
 		initFunc:           func() error { return renderer.Init() },
@@ -888,12 +893,13 @@ func NewTerminal(opts *Options, eventBox *util.EventBox, executor *util.Executor
 	if t.tui.ShouldEmitResizeEvent() {
 		t.keymap[tui.Resize.AsEvent()] = append(toActions(actClearScreen), resizeActions...)
 	}
+	_, t.hasStartActions = t.keymap[tui.Start.AsEvent()]
 	_, t.hasResultActions = t.keymap[tui.Result.AsEvent()]
 	_, t.hasFocusActions = t.keymap[tui.Focus.AsEvent()]
 	_, t.hasLoadActions = t.keymap[tui.Load.AsEvent()]
 
 	if t.listenAddr != nil {
-		listener, port, err := startHttpServer(*t.listenAddr, t.serverInputChan, t.serverOutputChan)
+		listener, port, err := startHttpServer(*t.listenAddr, t.serverInputChan, t.dumpStatus)
 		if err != nil {
 			return nil, err
 		}
@@ -901,7 +907,15 @@ func NewTerminal(opts *Options, eventBox *util.EventBox, executor *util.Executor
 		t.listenPort = &port
 	}
 
+	if t.hasStartActions {
+		t.eventChan <- tui.Start.AsEvent()
+	}
+
 	return &t, nil
+}
+
+func (t *Terminal) deferActivation() bool {
+	return t.initDelay == 0 && (t.hasStartActions || t.hasLoadActions || t.hasResultActions)
 }
 
 func (t *Terminal) environ() []string {
@@ -1125,10 +1139,14 @@ func (t *Terminal) UpdateCount(cnt int, final bool, failedCommand *string) {
 	}
 	t.reading = !final
 	t.failed = failedCommand
+	suppressed := t.suppress
 	t.mutex.Unlock()
 	t.reqBox.Set(reqInfo, nil)
-	if final {
-		t.reqBox.Set(reqRefresh, nil)
+
+	// We want to defer activating the interface when --sync is used and any of
+	// start, load, or result events are bound
+	if suppressed && final && !t.deferActivation() {
+		t.reqBox.Set(reqActivate, nil)
 	}
 }
 
@@ -1161,7 +1179,7 @@ func (t *Terminal) UpdateProgress(progress float32) {
 }
 
 // UpdateList updates Merger to display the list
-func (t *Terminal) UpdateList(merger *Merger, triggerResultEvent bool) {
+func (t *Terminal) UpdateList(merger *Merger) {
 	t.mutex.Lock()
 	prevIndex := minItem.Index()
 	newRevision := merger.Revision()
@@ -1174,7 +1192,7 @@ func (t *Terminal) UpdateList(merger *Merger, triggerResultEvent bool) {
 	}
 	t.progress = 100
 	t.merger = merger
-	if !t.revision.equals(newRevision) {
+	if t.revision != newRevision {
 		if !t.revision.compatible(newRevision) {
 			// Reloaded: clear selection
 			t.selected = make(map[int32]selectedItem)
@@ -1232,7 +1250,7 @@ func (t *Terminal) UpdateList(merger *Merger, triggerResultEvent bool) {
 				t.eventChan <- one
 			}
 		}
-		if triggerResultEvent && t.hasResultActions {
+		if t.hasResultActions {
 			t.eventChan <- tui.Result.AsEvent()
 		}
 	}
@@ -2648,7 +2666,7 @@ func (t *Terminal) printAll() {
 	t.printPreview()
 }
 
-func (t *Terminal) refresh() {
+func (t *Terminal) flush() {
 	t.placeCursor()
 	if !t.suppress {
 		windows := make([]tui.Window, 0, 4)
@@ -2952,7 +2970,7 @@ func replacePlaceholder(params replacePlaceholderParams) (string, []string) {
 	return replaced, tempFiles
 }
 
-func (t *Terminal) redraw() {
+func (t *Terminal) fullRedraw() {
 	t.tui.Clear()
 	t.tui.Refresh()
 	t.printAll()
@@ -2995,12 +3013,18 @@ func (t *Terminal) executeCommand(template string, forcePlus bool, background bo
 			}
 		}
 
+		t.mutex.Unlock()
+		t.uiMutex.Lock()
 		t.tui.Pause(true)
 		cmd.Run()
 		t.tui.Resume(true, false)
-		t.redraw()
-		t.refresh()
+		t.mutex.Lock()
+		t.fullRedraw()
+		t.flush()
+		t.uiMutex.Unlock()
 	} else {
+		t.mutex.Unlock()
+		t.uiMutex.Lock()
 		if capture {
 			out, _ := cmd.StdoutPipe()
 			reader := bufio.NewReader(out)
@@ -3016,6 +3040,8 @@ func (t *Terminal) executeCommand(template string, forcePlus bool, background bo
 		} else {
 			cmd.Run()
 		}
+		t.mutex.Lock()
+		t.uiMutex.Unlock()
 	}
 	t.executing.Set(false)
 	removeFiles(tempFiles)
@@ -3238,13 +3264,15 @@ func (t *Terminal) Loop() error {
 		t.printPrompt()
 		t.printInfo()
 		t.printHeader()
-		t.refresh()
+		t.flush()
 		t.mutex.Unlock()
-		go func() {
-			timer := time.NewTimer(t.initDelay)
-			<-timer.C
-			t.reqBox.Set(reqRefresh, nil)
-		}()
+		if t.initDelay > 0 {
+			go func() {
+				timer := time.NewTimer(t.initDelay)
+				<-timer.C
+				t.reqBox.Set(reqActivate, nil)
+			}()
+		}
 
 		// Keep the spinner spinning
 		go func() {
@@ -3438,7 +3466,7 @@ func (t *Terminal) Loop() error {
 		}
 	}
 
-	go func() {
+	go func() { // Render loop
 		var focusedIndex = minItem.Index()
 		var version int64 = -1
 		running := true
@@ -3462,6 +3490,23 @@ func (t *Terminal) Loop() error {
 		for running {
 			t.reqBox.Wait(func(events *util.Events) {
 				defer events.Clear()
+
+				// t.uiMutex must be locked first to avoid deadlock. Execute actions
+				// will 1. unlock t.mutex to allow GET endpoint and 2. lock t.uiMutex
+				// to block rendering during the execution.
+				//
+				// T1           T2 (good)       |  T1            T2 (bad)
+				//               L t.uiMutex    |
+				//  L t.mutex                   |   L t.mutex
+				//  U t.mutex                   |   U t.mutex
+				//               L t.mutex      |                 L t.mutex
+				//               U t.mutex      |   L t.uiMutex
+				//               U t.uiMutex    |                 L t.uiMutex!!
+				//  L t.uiMutex                 |
+				//                              |   L t.mutex!!
+				//  L t.mutex                   |   U t.uiMutex
+				//  U t.uiMutex                 |
+				t.uiMutex.Lock()
 				t.mutex.Lock()
 				for req, value := range *events {
 					switch req {
@@ -3496,7 +3541,7 @@ func (t *Terminal) Loop() error {
 						t.printList()
 					case reqHeader:
 						t.printHeader()
-					case reqRefresh:
+					case reqActivate:
 						t.suppress = false
 					case reqRedrawBorderLabel:
 						t.printLabel(t.border, t.borderLabel, t.borderLabelOpts, t.borderLabelLen, t.borderShape, true)
@@ -3504,13 +3549,13 @@ func (t *Terminal) Loop() error {
 						t.printLabel(t.pborder, t.previewLabel, t.previewLabelOpts, t.previewLabelLen, t.previewOpts.border, true)
 					case reqReinit:
 						t.tui.Resume(t.fullscreen, t.sigstop)
-						t.redraw()
+						t.fullRedraw()
 					case reqResize, reqFullRedraw:
 						if req == reqResize {
 							t.termSize = t.tui.Size()
 						}
 						wasHidden := t.pwindow == nil
-						t.redraw()
+						t.fullRedraw()
 						if wasHidden && t.hasPreviewWindow() {
 							refreshPreview(t.previewOpts.command)
 						}
@@ -3564,8 +3609,9 @@ func (t *Terminal) Loop() error {
 						return
 					}
 				}
-				t.refresh()
+				t.flush()
 				t.mutex.Unlock()
+				t.uiMutex.Unlock()
 			})
 		}
 
@@ -3576,9 +3622,6 @@ func (t *Terminal) Loop() error {
 	}()
 
 	looping := true
-	_, startEvent := t.keymap[tui.Start.AsEvent()]
-
-	needBarrier := true
 	barrier := make(chan bool)
 	go func() {
 		for {
@@ -3590,7 +3633,7 @@ func (t *Terminal) Loop() error {
 			select {
 			case <-ctx.Done():
 				return
-			case t.eventChan <- t.tui.GetChar():
+			case t.keyChan <- t.tui.GetChar():
 			}
 		}
 	}()
@@ -3598,42 +3641,63 @@ func (t *Terminal) Loop() error {
 	barDragging := false
 	pbarDragging := false
 	wasDown := false
-	for looping {
+	needBarrier := true
+
+	// If an action is bound to 'start', we're going to process it before reading
+	// user input.
+	if !t.hasStartActions {
+		barrier <- true
+		needBarrier = false
+	}
+	for loopIndex := int64(0); looping; loopIndex++ {
 		var newCommand *commandSpec
 		var reloadSync bool
 		changed := false
 		beof := false
 		queryChanged := false
 
+		// Special handling of --sync. Activate the interface on the second tick.
+		if loopIndex == 1 && t.deferActivation() {
+			t.reqBox.Set(reqActivate, nil)
+		}
+
+		if loopIndex > 0 && needBarrier {
+			barrier <- true
+			needBarrier = false
+		}
+
 		var event tui.Event
 		actions := []*action{}
-		if startEvent {
-			event = tui.Start.AsEvent()
-			startEvent = false
-		} else {
-			if needBarrier {
-				barrier <- true
-			}
-			select {
-			case event = <-t.eventChan:
-				if t.tui.ShouldEmitResizeEvent() {
-					needBarrier = !event.Is(tui.Load, tui.Result, tui.Focus, tui.One, tui.Zero)
-				} else {
-					needBarrier = !event.Is(tui.Load, tui.Result, tui.Focus, tui.One, tui.Zero, tui.Resize)
+		select {
+		case event = <-t.keyChan:
+			needBarrier = true
+		case event = <-t.eventChan:
+			// Drain channel to process all queued events at once without rendering
+			// the intermediate states
+		Drain:
+			for {
+				if eventActions, prs := t.keymap[event]; prs {
+					actions = append(actions, eventActions...)
 				}
-			case serverActions := <-t.serverInputChan:
-				event = tui.Invalid.AsEvent()
-				if t.listenAddr == nil || t.listenAddr.IsLocal() || t.listenUnsafe {
-					actions = serverActions
-				} else {
-					for _, action := range serverActions {
-						if !processExecution(action.t) {
-							actions = append(actions, action)
-						}
+				for {
+					select {
+					case event = <-t.eventChan:
+						continue Drain
+					default:
+						break Drain
 					}
 				}
-
-				needBarrier = false
+			}
+		case serverActions := <-t.serverInputChan:
+			event = tui.Invalid.AsEvent()
+			if t.listenAddr == nil || t.listenAddr.IsLocal() || t.listenUnsafe {
+				actions = serverActions
+			} else {
+				for _, action := range serverActions {
+					if !processExecution(action.t) {
+						actions = append(actions, action)
+					}
+				}
 			}
 		}
 
@@ -3641,8 +3705,8 @@ func (t *Terminal) Loop() error {
 		for key, ret := range t.expect {
 			if keyMatch(key, event) {
 				t.pressed = ret
-				t.reqBox.Set(reqClose, nil)
 				t.mutex.Unlock()
+				t.reqBox.Set(reqClose, nil)
 				return nil
 			}
 		}
@@ -3719,8 +3783,6 @@ func (t *Terminal) Loop() error {
 		doAction = func(a *action) bool {
 			switch a.t {
 			case actIgnore, actStart, actClick:
-			case actResponse:
-				t.serverOutputChan <- t.dumpStatus(parseGetParams(a.a))
 			case actBecome:
 				valid, list := t.buildPlusList(a.a, false)
 				if valid {
@@ -4708,7 +4770,29 @@ func (t *Terminal) dumpItem(i *Item) StatusItem {
 	}
 }
 
+func (t *Terminal) tryLock(timeout time.Duration) bool {
+	sleepDuration := 10 * time.Millisecond
+
+	for {
+		if t.mutex.TryLock() {
+			return true
+		}
+
+		timeout -= sleepDuration
+		if timeout <= 0 {
+			break
+		}
+		time.Sleep(sleepDuration)
+	}
+	return false
+}
+
 func (t *Terminal) dumpStatus(params getParams) string {
+	if !t.tryLock(channelTimeout) {
+		return ""
+	}
+	defer t.mutex.Unlock()
+
 	selectedItems := t.sortSelected()
 	selected := make([]StatusItem, util.Max(0, util.Min(params.limit, len(selectedItems)-params.offset)))
 	for i := range selected {

@@ -194,25 +194,19 @@ __fzf_comprun() {
   fi
 }
 
-# Extract the name of the command. e.g. foo=1 bar baz**<tab>
+# Extract the name of the command. e.g. ls; foo=1 ssh **<tab>
 __fzf_extract_command() {
-  local token tokens
-  tokens=(${(z)1})
-  for token in $tokens; do
-    token=${(Q)token}
-    if [[ "$token" =~ [[:alnum:]] && ! "$token" =~ "=" ]]; then
-      echo "$token"
-      return
-    fi
-  done
-  echo "${tokens[1]}"
+  setopt localoptions noksh_arrays
+  # Control completion with the "compstate" parameter, insert and list noting
+  compstate[insert]=
+  compstate[list]=
+  cmd_word="${words[1]}"
 }
 
 __fzf_generic_path_completion() {
-  local base lbuf cmd compgen fzf_opts suffix tail dir leftover matches
+  local base lbuf compgen fzf_opts suffix tail dir leftover matches
   base=$1
   lbuf=$2
-  cmd=$(__fzf_extract_command "$lbuf")
   compgen=$3
   fzf_opts=$4
   suffix=$5
@@ -235,7 +229,7 @@ __fzf_generic_path_completion() {
         FZF_DEFAULT_OPTS=$(__fzf_defaults "--reverse --scheme=path" "${FZF_COMPLETION_OPTS-}")
         unset FZF_DEFAULT_COMMAND FZF_DEFAULT_OPTS_FILE
         if declare -f "$compgen" > /dev/null; then
-          eval "$compgen $(printf %q "$dir")" | __fzf_comprun "$cmd" ${(Q)${(Z+n+)fzf_opts}} -q "$leftover"
+          eval "$compgen $(printf %q "$dir")" | __fzf_comprun "$cmd_word" ${(Q)${(Z+n+)fzf_opts}} -q "$leftover"
         else
           if [[ $compgen =~ dir ]]; then
             walker=dir,follow
@@ -244,7 +238,7 @@ __fzf_generic_path_completion() {
             walker=file,dir,follow,hidden
             rest=${FZF_COMPLETION_PATH_OPTS-}
           fi
-          __fzf_comprun "$cmd" ${(Q)${(Z+n+)fzf_opts}} -q "$leftover" --walker "$walker" --walker-root="$dir" ${(Q)${(Z+n+)rest}} < /dev/tty
+          __fzf_comprun "$cmd_word" ${(Q)${(Z+n+)fzf_opts}} -q "$leftover" --walker "$walker" --walker-root="$dir" ${(Q)${(Z+n+)rest}} < /dev/tty
         fi | while read -r item; do
           item="${item%$suffix}$suffix"
           echo -n -E "${item} "
@@ -447,10 +441,9 @@ _fzf_complete() {
     rest=("$@")
   fi
 
-  local fifo lbuf cmd matches post
+  local fifo lbuf matches post
   fifo="${TMPDIR:-/tmp}/fzf-complete-fifo-$$"
   lbuf=${rest[0]}
-  cmd=$(__fzf_extract_command "$lbuf")
   post="${funcstack[1]}_post"
   type $post > /dev/null 2>&1 || post=cat
 
@@ -458,7 +451,7 @@ _fzf_complete() {
   matches=$(
     FZF_DEFAULT_OPTS=$(__fzf_defaults "--reverse" "${FZF_COMPLETION_OPTS-} $str_arg") \
     FZF_DEFAULT_OPTS_FILE='' \
-      __fzf_comprun "$cmd" "${args[@]}" -q "${(Q)prefix}" < "$fifo" | $post | tr '\n' ' ')
+      __fzf_comprun "$cmd_word" "${args[@]}" -q "${(Q)prefix}" < "$fifo" | $post | tr '\n' ' ')
   if [ -n "$matches" ]; then
     LBUFFER="$lbuf$matches"
   fi
@@ -530,9 +523,16 @@ _fzf_complete_kill_post() {
 }
 
 fzf-completion() {
-  local tokens cmd prefix trigger_general trigger_fasd_paths trigger_fasd_files trigger_fasd_dirs triggers current_trigger tail reversed_head matches lbuf d_cmds
+  trap 'unset cmd_word' EXIT
+  local tokens prefix trigger_general trigger_fasd_paths trigger_fasd_files trigger_fasd_dirs triggers current_trigger tail reversed_head matches lbuf d_cmds
   setopt localoptions noshwordsplit noksh_arrays noposixbuiltins
 
+  # Check if at least one completion system (old or new) is active
+  if ! zmodload -F zsh/parameter p:functions 2>/dev/null || ! (( $+functions[compdef] )); then
+    if ! zmodload -e zsh/compctl; then
+      zmodload -i zsh/compctl
+    fi
+  fi
   # http://zsh.sourceforge.net/FAQ/zshfaq03.html
   # http://zsh.sourceforge.net/Doc/Release/Expansion.html#Parameter-Expansion-Flags
   tokens=(${(z)LBUFFER})
@@ -540,8 +540,6 @@ fzf-completion() {
     zle ${fzf_default_completion:-expand-or-complete}
     return
   fi
-
-  cmd=$(__fzf_extract_command "$LBUFFER")
 
   # Explicitly allow for empty trigger.
   # Important: all triggers must have the same character length!
@@ -574,6 +572,10 @@ fzf-completion() {
 
     d_cmds=(${=FZF_COMPLETION_DIR_COMMANDS-cd pushd rmdir})
 
+    # Make the 'cmd_word' global
+    zle __fzf_extract_command || :
+    [[ -z "$cmd_word" ]] && return
+
     [ -z "$current_trigger"      ] && prefix=${tokens[-1]} || prefix=${tokens[-1]:0:-${#current_trigger}}
     if [[ $prefix = *'$('* ]] || [[ $prefix = *'<('* ]] || [[ $prefix = *'>('* ]] || [[ $prefix = *':='* ]] || [[ $prefix = *'`'* ]]; then
       return
@@ -581,10 +583,10 @@ fzf-completion() {
     [ -n "${tokens[-1]}" ] && lbuf=${lbuf:0:-${#tokens[-1]}}
 
     if [ "$current_trigger" = "$trigger_general" ]; then
-      if eval "type _fzf_complete_${cmd} > /dev/null"; then
-        prefix="$prefix" eval _fzf_complete_${cmd} ${(q)lbuf}
+      if eval "type _fzf_complete_${cmd_word} > /dev/null"; then
+        prefix="$prefix" eval _fzf_complete_${cmd_word} ${(q)lbuf}
         zle reset-prompt
-      elif [ ${d_cmds[(i)$cmd]} -le ${#d_cmds} ]; then
+      elif [ ${d_cmds[(i)$cmd_word]} -le ${#d_cmds} ]; then
         _fzf_dir_completion "$prefix" "$lbuf"
       else
         _fzf_path_completion "$prefix" "$lbuf"
@@ -609,6 +611,9 @@ fzf-completion() {
   unset binding
 }
 
+# Completion widget to gain access to the 'words' array (man zshcompwid)
+zle     -C   __fzf_extract_command .complete-word __fzf_extract_command
+# Normal widget
 zle     -N   fzf-completion
 bindkey '^I' fzf-completion
 fi

@@ -303,6 +303,8 @@ type ColorTheme struct {
 	Disabled         ColorAttr
 	Fg               ColorAttr
 	Bg               ColorAttr
+	ListFg           ColorAttr
+	ListBg           ColorAttr
 	SelectedFg       ColorAttr
 	SelectedBg       ColorAttr
 	SelectedMatch    ColorAttr
@@ -311,6 +313,9 @@ type ColorTheme struct {
 	DarkBg           ColorAttr
 	Gutter           ColorAttr
 	Prompt           ColorAttr
+	InputBg          ColorAttr
+	InputBorder      ColorAttr
+	InputLabel       ColorAttr
 	Match            ColorAttr
 	Current          ColorAttr
 	CurrentMatch     ColorAttr
@@ -323,9 +328,11 @@ type ColorTheme struct {
 	Scrollbar        ColorAttr
 	Border           ColorAttr
 	PreviewBorder    ColorAttr
+	PreviewLabel     ColorAttr
 	PreviewScrollbar ColorAttr
 	BorderLabel      ColorAttr
-	PreviewLabel     ColorAttr
+	ListLabel        ColorAttr
+	ListBorder       ColorAttr
 }
 
 type Event struct {
@@ -393,6 +400,10 @@ func (s BorderShape) HasBottom() bool {
 		return false
 	}
 	return true
+}
+
+func (s BorderShape) Visible() bool {
+	return s != BorderNone
 }
 
 type BorderStyle struct {
@@ -525,7 +536,17 @@ type TermSize struct {
 	PxHeight int
 }
 
+type WindowType int
+
+const (
+	WindowBase WindowType = iota
+	WindowList
+	WindowPreview
+	WindowInput
+)
+
 type Renderer interface {
+	DefaultTheme() *ColorTheme
 	Init() error
 	Resize(maxHeightFunc func(int) int)
 	Pause(clear bool)
@@ -546,7 +567,7 @@ type Renderer interface {
 
 	Size() TermSize
 
-	NewWindow(top int, left int, width int, height int, preview bool, borderStyle BorderStyle) Window
+	NewWindow(top int, left int, width int, height int, windowType WindowType, borderStyle BorderStyle, erase bool) Window
 }
 
 type Window interface {
@@ -627,6 +648,10 @@ var (
 	ColPreviewLabel         ColorPair
 	ColPreviewScrollbar     ColorPair
 	ColPreviewSpinner       ColorPair
+	ColListBorder           ColorPair
+	ColListLabel            ColorPair
+	ColInputBorder          ColorPair
+	ColInputLabel           ColorPair
 )
 
 func EmptyTheme() *ColorTheme {
@@ -635,6 +660,8 @@ func EmptyTheme() *ColorTheme {
 		Input:            ColorAttr{colUndefined, AttrUndefined},
 		Fg:               ColorAttr{colUndefined, AttrUndefined},
 		Bg:               ColorAttr{colUndefined, AttrUndefined},
+		ListFg:           ColorAttr{colUndefined, AttrUndefined},
+		ListBg:           ColorAttr{colUndefined, AttrUndefined},
 		SelectedFg:       ColorAttr{colUndefined, AttrUndefined},
 		SelectedBg:       ColorAttr{colUndefined, AttrUndefined},
 		SelectedMatch:    ColorAttr{colUndefined, AttrUndefined},
@@ -650,6 +677,8 @@ func EmptyTheme() *ColorTheme {
 		Header:           ColorAttr{colUndefined, AttrUndefined},
 		Border:           ColorAttr{colUndefined, AttrUndefined},
 		BorderLabel:      ColorAttr{colUndefined, AttrUndefined},
+		ListLabel:        ColorAttr{colUndefined, AttrUndefined},
+		ListBorder:       ColorAttr{colUndefined, AttrUndefined},
 		Disabled:         ColorAttr{colUndefined, AttrUndefined},
 		PreviewFg:        ColorAttr{colUndefined, AttrUndefined},
 		PreviewBg:        ColorAttr{colUndefined, AttrUndefined},
@@ -659,6 +688,9 @@ func EmptyTheme() *ColorTheme {
 		PreviewLabel:     ColorAttr{colUndefined, AttrUndefined},
 		Separator:        ColorAttr{colUndefined, AttrUndefined},
 		Scrollbar:        ColorAttr{colUndefined, AttrUndefined},
+		InputBg:          ColorAttr{colUndefined, AttrUndefined},
+		InputBorder:      ColorAttr{colUndefined, AttrUndefined},
+		InputLabel:       ColorAttr{colUndefined, AttrUndefined},
 	}
 }
 
@@ -668,6 +700,8 @@ func NoColorTheme() *ColorTheme {
 		Input:            ColorAttr{colDefault, AttrUndefined},
 		Fg:               ColorAttr{colDefault, AttrUndefined},
 		Bg:               ColorAttr{colDefault, AttrUndefined},
+		ListFg:           ColorAttr{colDefault, AttrUndefined},
+		ListBg:           ColorAttr{colDefault, AttrUndefined},
 		SelectedFg:       ColorAttr{colDefault, AttrUndefined},
 		SelectedBg:       ColorAttr{colDefault, AttrUndefined},
 		SelectedMatch:    ColorAttr{colDefault, AttrUndefined},
@@ -690,8 +724,13 @@ func NoColorTheme() *ColorTheme {
 		PreviewBorder:    ColorAttr{colDefault, AttrUndefined},
 		PreviewScrollbar: ColorAttr{colDefault, AttrUndefined},
 		PreviewLabel:     ColorAttr{colDefault, AttrUndefined},
+		ListLabel:        ColorAttr{colDefault, AttrUndefined},
+		ListBorder:       ColorAttr{colDefault, AttrUndefined},
 		Separator:        ColorAttr{colDefault, AttrUndefined},
 		Scrollbar:        ColorAttr{colDefault, AttrUndefined},
+		InputBg:          ColorAttr{colDefault, AttrUndefined},
+		InputBorder:      ColorAttr{colDefault, AttrUndefined},
+		InputLabel:       ColorAttr{colDefault, AttrUndefined},
 	}
 }
 
@@ -701,6 +740,8 @@ func init() {
 		Input:            ColorAttr{colDefault, AttrUndefined},
 		Fg:               ColorAttr{colDefault, AttrUndefined},
 		Bg:               ColorAttr{colDefault, AttrUndefined},
+		ListFg:           ColorAttr{colUndefined, AttrUndefined},
+		ListBg:           ColorAttr{colUndefined, AttrUndefined},
 		SelectedFg:       ColorAttr{colUndefined, AttrUndefined},
 		SelectedBg:       ColorAttr{colUndefined, AttrUndefined},
 		SelectedMatch:    ColorAttr{colUndefined, AttrUndefined},
@@ -723,14 +764,21 @@ func init() {
 		PreviewBorder:    ColorAttr{colUndefined, AttrUndefined},
 		PreviewScrollbar: ColorAttr{colUndefined, AttrUndefined},
 		PreviewLabel:     ColorAttr{colUndefined, AttrUndefined},
+		ListLabel:        ColorAttr{colUndefined, AttrUndefined},
+		ListBorder:       ColorAttr{colUndefined, AttrUndefined},
 		Separator:        ColorAttr{colUndefined, AttrUndefined},
 		Scrollbar:        ColorAttr{colUndefined, AttrUndefined},
+		InputBg:          ColorAttr{colUndefined, AttrUndefined},
+		InputBorder:      ColorAttr{colUndefined, AttrUndefined},
+		InputLabel:       ColorAttr{colUndefined, AttrUndefined},
 	}
 	Dark256 = &ColorTheme{
 		Colored:          true,
 		Input:            ColorAttr{colDefault, AttrUndefined},
 		Fg:               ColorAttr{colDefault, AttrUndefined},
 		Bg:               ColorAttr{colDefault, AttrUndefined},
+		ListFg:           ColorAttr{colUndefined, AttrUndefined},
+		ListBg:           ColorAttr{colUndefined, AttrUndefined},
 		SelectedFg:       ColorAttr{colUndefined, AttrUndefined},
 		SelectedBg:       ColorAttr{colUndefined, AttrUndefined},
 		SelectedMatch:    ColorAttr{colUndefined, AttrUndefined},
@@ -753,14 +801,21 @@ func init() {
 		PreviewBorder:    ColorAttr{colUndefined, AttrUndefined},
 		PreviewScrollbar: ColorAttr{colUndefined, AttrUndefined},
 		PreviewLabel:     ColorAttr{colUndefined, AttrUndefined},
+		ListLabel:        ColorAttr{colUndefined, AttrUndefined},
+		ListBorder:       ColorAttr{colUndefined, AttrUndefined},
 		Separator:        ColorAttr{colUndefined, AttrUndefined},
 		Scrollbar:        ColorAttr{colUndefined, AttrUndefined},
+		InputBg:          ColorAttr{colUndefined, AttrUndefined},
+		InputBorder:      ColorAttr{colUndefined, AttrUndefined},
+		InputLabel:       ColorAttr{colUndefined, AttrUndefined},
 	}
 	Light256 = &ColorTheme{
 		Colored:          true,
 		Input:            ColorAttr{colDefault, AttrUndefined},
 		Fg:               ColorAttr{colDefault, AttrUndefined},
 		Bg:               ColorAttr{colDefault, AttrUndefined},
+		ListFg:           ColorAttr{colUndefined, AttrUndefined},
+		ListBg:           ColorAttr{colUndefined, AttrUndefined},
 		SelectedFg:       ColorAttr{colUndefined, AttrUndefined},
 		SelectedBg:       ColorAttr{colUndefined, AttrUndefined},
 		SelectedMatch:    ColorAttr{colUndefined, AttrUndefined},
@@ -783,12 +838,17 @@ func init() {
 		PreviewBorder:    ColorAttr{colUndefined, AttrUndefined},
 		PreviewScrollbar: ColorAttr{colUndefined, AttrUndefined},
 		PreviewLabel:     ColorAttr{colUndefined, AttrUndefined},
+		ListLabel:        ColorAttr{colUndefined, AttrUndefined},
+		ListBorder:       ColorAttr{colUndefined, AttrUndefined},
 		Separator:        ColorAttr{colUndefined, AttrUndefined},
 		Scrollbar:        ColorAttr{colUndefined, AttrUndefined},
+		InputBg:          ColorAttr{colUndefined, AttrUndefined},
+		InputBorder:      ColorAttr{colUndefined, AttrUndefined},
+		InputLabel:       ColorAttr{colUndefined, AttrUndefined},
 	}
 }
 
-func initTheme(theme *ColorTheme, baseTheme *ColorTheme, forceBlack bool) {
+func InitTheme(theme *ColorTheme, baseTheme *ColorTheme, forceBlack bool) {
 	if forceBlack {
 		theme.Bg = ColorAttr{colBlack, AttrUndefined}
 	}
@@ -820,8 +880,10 @@ func initTheme(theme *ColorTheme, baseTheme *ColorTheme, forceBlack bool) {
 	theme.BorderLabel = o(baseTheme.BorderLabel, theme.BorderLabel)
 
 	// These colors are not defined in the base themes
-	theme.SelectedFg = o(theme.Fg, theme.SelectedFg)
-	theme.SelectedBg = o(theme.Bg, theme.SelectedBg)
+	theme.ListFg = o(theme.Fg, theme.ListFg)
+	theme.ListBg = o(theme.Bg, theme.ListBg)
+	theme.SelectedFg = o(theme.ListFg, theme.SelectedFg)
+	theme.SelectedBg = o(theme.ListBg, theme.SelectedBg)
 	theme.SelectedMatch = o(theme.Match, theme.SelectedMatch)
 	theme.Disabled = o(theme.Input, theme.Disabled)
 	theme.Gutter = o(theme.DarkBg, theme.Gutter)
@@ -829,9 +891,14 @@ func initTheme(theme *ColorTheme, baseTheme *ColorTheme, forceBlack bool) {
 	theme.PreviewBg = o(theme.Bg, theme.PreviewBg)
 	theme.PreviewLabel = o(theme.BorderLabel, theme.PreviewLabel)
 	theme.PreviewBorder = o(theme.Border, theme.PreviewBorder)
-	theme.Separator = o(theme.Border, theme.Separator)
-	theme.Scrollbar = o(theme.Border, theme.Scrollbar)
+	theme.ListLabel = o(theme.BorderLabel, theme.ListLabel)
+	theme.ListBorder = o(theme.Border, theme.ListBorder)
+	theme.Separator = o(theme.ListBorder, theme.Separator)
+	theme.Scrollbar = o(theme.ListBorder, theme.Scrollbar)
 	theme.PreviewScrollbar = o(theme.PreviewBorder, theme.PreviewScrollbar)
+	theme.InputBg = o(theme.Bg, o(theme.ListBg, theme.InputBg))
+	theme.InputBorder = o(theme.Border, theme.InputBorder)
+	theme.InputLabel = o(theme.BorderLabel, theme.InputLabel)
 
 	initPalette(theme)
 }
@@ -843,19 +910,19 @@ func initPalette(theme *ColorTheme) {
 		}
 		return ColorPair{fg.Color, bg.Color, fg.Attr}
 	}
-	blank := theme.Fg
+	blank := theme.ListFg
 	blank.Attr = AttrRegular
 
-	ColPrompt = pair(theme.Prompt, theme.Bg)
-	ColNormal = pair(theme.Fg, theme.Bg)
+	ColPrompt = pair(theme.Prompt, theme.InputBg)
+	ColNormal = pair(theme.ListFg, theme.ListBg)
 	ColSelected = pair(theme.SelectedFg, theme.SelectedBg)
-	ColInput = pair(theme.Input, theme.Bg)
-	ColDisabled = pair(theme.Disabled, theme.Bg)
-	ColMatch = pair(theme.Match, theme.Bg)
+	ColInput = pair(theme.Input, theme.InputBg)
+	ColDisabled = pair(theme.Disabled, theme.ListBg)
+	ColMatch = pair(theme.Match, theme.ListBg)
 	ColSelectedMatch = pair(theme.SelectedMatch, theme.SelectedBg)
 	ColCursor = pair(theme.Cursor, theme.Gutter)
 	ColCursorEmpty = pair(blank, theme.Gutter)
-	if theme.SelectedBg.Color != theme.Bg.Color {
+	if theme.SelectedBg.Color != theme.ListBg.Color {
 		ColMarker = pair(theme.Marker, theme.SelectedBg)
 	} else {
 		ColMarker = pair(theme.Marker, theme.Gutter)
@@ -866,11 +933,11 @@ func initPalette(theme *ColorTheme) {
 	ColCurrentCursorEmpty = pair(blank, theme.DarkBg)
 	ColCurrentMarker = pair(theme.Marker, theme.DarkBg)
 	ColCurrentSelectedEmpty = pair(blank, theme.DarkBg)
-	ColSpinner = pair(theme.Spinner, theme.Bg)
-	ColInfo = pair(theme.Info, theme.Bg)
-	ColHeader = pair(theme.Header, theme.Bg)
-	ColSeparator = pair(theme.Separator, theme.Bg)
-	ColScrollbar = pair(theme.Scrollbar, theme.Bg)
+	ColSpinner = pair(theme.Spinner, theme.InputBg)
+	ColInfo = pair(theme.Info, theme.InputBg)
+	ColHeader = pair(theme.Header, theme.ListBg)
+	ColSeparator = pair(theme.Separator, theme.InputBg)
+	ColScrollbar = pair(theme.Scrollbar, theme.ListBg)
 	ColBorder = pair(theme.Border, theme.Bg)
 	ColBorderLabel = pair(theme.BorderLabel, theme.Bg)
 	ColPreviewLabel = pair(theme.PreviewLabel, theme.PreviewBg)
@@ -878,6 +945,10 @@ func initPalette(theme *ColorTheme) {
 	ColPreviewBorder = pair(theme.PreviewBorder, theme.PreviewBg)
 	ColPreviewScrollbar = pair(theme.PreviewScrollbar, theme.PreviewBg)
 	ColPreviewSpinner = pair(theme.Spinner, theme.PreviewBg)
+	ColListLabel = pair(theme.ListLabel, theme.ListBg)
+	ColListBorder = pair(theme.ListBorder, theme.ListBg)
+	ColInputBorder = pair(theme.InputBorder, theme.InputBg)
+	ColInputLabel = pair(theme.InputLabel, theme.InputBg)
 }
 
 func runeWidth(r rune) int {

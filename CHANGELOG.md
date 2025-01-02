@@ -1,6 +1,38 @@
 CHANGELOG
 =========
 
+0.58.0
+------
+- Border and label for the list section
+    - Options
+        - `--list-border[=STYLE]`
+        - `--list-label=LABEL`
+        - `--list-label-pos=COL[:bottom]`
+    - Colors
+        - `list-fg`
+        - `list-bg`
+        - `list-border`
+        - `list-label`
+    - Actions
+        - `change-list-label`
+        - `transform-list-label`
+- Border and label for the input section (prompt and info)
+    - Options
+        - `--input-border[=STYLE]`
+        - `--input-label=LABEL`
+        - `--input-label-pos=COL[:bottom]`
+    - Colors
+        - `input-fg` (`query`)
+        - `input-bg`
+        - `input-border`
+        - `input-label`
+    - Actions
+        - `change-input-label`
+        - `transform-input-label`
+- Added `--preview-border[=STYLE]` as short for `--preview-window=border-[STYLE]`
+- Added `toggle-multi-line` action
+- Added `toggle-hscroll` action
+
 0.57.0
 ------
 - You can now resize the preview window by dragging the border

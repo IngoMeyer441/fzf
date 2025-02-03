@@ -1,7 +1,7 @@
 Advanced fzf examples
 ======================
 
-* *Last update: 2025/01/26*
+* *Last update: 2025/02/02*
 * *Requires fzf 0.59.0 or later*
 
 ---
@@ -22,7 +22,7 @@ Advanced fzf examples
     * [Switching to fzf-only search mode](#switching-to-fzf-only-search-mode)
     * [Switching between Ripgrep mode and fzf mode](#switching-between-ripgrep-mode-and-fzf-mode)
     * [Switching between Ripgrep mode and fzf mode using a single key binding](#switching-between-ripgrep-mode-and-fzf-mode-using-a-single-key-binding)
-    * [Controlling Ripgrap search and fzf search simultaneously](#controlling-ripgrap-search-and-fzf-search-simultaneously)
+    * [Controlling Ripgrep search and fzf search simultaneously](#controlling-ripgrep-search-and-fzf-search-simultaneously)
 * [Log tailing](#log-tailing)
 * [Key bindings for git objects](#key-bindings-for-git-objects)
     * [Files listed in `git status`](#files-listed-in-git-status)
@@ -501,15 +501,15 @@ fzf --ansi --disabled --query "$INITIAL_QUERY" \
     --bind 'enter:become(vim {1} +{2})'
 ```
 
-### Controlling Ripgrap search and fzf search simultaneously
+### Controlling Ripgrep search and fzf search simultaneously
 
-fzf 0.59.0 added `search` action that allows you to trigger an fzf search
-with an arbitrary query string. This means fzf is no longer restricted to the
-exact query entered in the prompt.
+`search` and `transform-search` action allow you to trigger an fzf search with
+an arbitrary query string. This frees fzf from strictly following the prompt
+input, enabling custom search syntax.
 
 In the example below, `transform` action is used to conditionally trigger
-either `reload` for ripgrep or `search` for fzf. The first word of the query
-initiates the Ripgrep process to generate the initial results, while the
+`reload` for ripgrep, followed by `search` for fzf. The first word of the
+query initiates the Ripgrep process to generate the initial results, while the
 remainder of the query is passed to fzf for secondary filtering.
 
 ```sh
@@ -535,7 +535,7 @@ fzf --ansi --disabled --query "$INITIAL_QUERY" \
     --color "hl:-1:underline,hl+:-1:underline:reverse" \
     --delimiter : \
     --preview 'bat --color=always {1} --highlight-line {2}' \
-    --preview-window 'up,60%,border-bottom,+{2}+3/3,~3' \
+    --preview-window 'up,60%,border-line,+{2}+3/3,~3' \
     --bind 'enter:become(vim {1} +{2})'
 ```
 

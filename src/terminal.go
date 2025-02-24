@@ -305,7 +305,7 @@ type Terminal struct {
 	nthAttr            tui.Attr
 	nth                []Range
 	nthCurrent         []Range
-	acceptNth          func([]Token) string
+	acceptNth          func([]Token, int32) string
 	tabstop            int
 	margin             [4]sizeSpec
 	padding            [4]sizeSpec
@@ -638,6 +638,7 @@ type previewRequest struct {
 	scrollOffset int
 	list         []*Item
 	env          []string
+	query        string
 }
 
 type previewResult struct {
@@ -1575,7 +1576,7 @@ func (t *Terminal) output() bool {
 	if t.acceptNth != nil {
 		transform = func(item *Item) string {
 			tokens := Tokenize(item.AsString(t.ansi), t.delimiter)
-			transformed := t.acceptNth(tokens)
+			transformed := t.acceptNth(tokens, item.Index())
 			return StripLastDelimiter(transformed, t.delimiter)
 		}
 	}
@@ -2754,11 +2755,15 @@ func (t *Terminal) printItem(result Result, line int, maxLine int, index int, cu
 	item := result.item
 	_, selected := t.selected[item.Index()]
 	label := ""
+	extraWidth := 0
 	if t.jumping != jumpDisabled {
 		if index < len(t.jumpLabels) {
 			// Striped
 			current = index%2 == 0
-			label = t.jumpLabels[index:index+1] + strings.Repeat(" ", t.pointerLen-1)
+			label = t.jumpLabels[index:index+1] + strings.Repeat(" ", util.Max(0, t.pointerLen-1))
+			if t.pointerLen == 0 {
+				extraWidth = 1
+			}
 		}
 	} else if current {
 		label = t.pointer
@@ -2787,6 +2792,7 @@ func (t *Terminal) printItem(result Result, line int, maxLine int, index int, cu
 
 	maxWidth := t.window.Width() - (t.pointerLen + t.markerLen + 1)
 	postTask := func(lineNum int, width int, wrapped bool, forceRedraw bool) {
+		width += extraWidth
 		if (current || selected) && t.highlightLine {
 			color := tui.ColSelected
 			if current {
@@ -3383,8 +3389,10 @@ func (t *Terminal) renderPreviewText(height int, lines []string, lineNo int, unc
 	wiped := false
 	image := false
 	wireframe := false
+	var index int
+	var line string
 Loop:
-	for _, line := range lines {
+	for index, line = range lines {
 		var lbg tui.Color = -1
 		if ansi != nil {
 			ansi.lbg = -1
@@ -3527,6 +3535,7 @@ Loop:
 		}
 		lineNo++
 	}
+	t.previewer.scrollable = t.previewer.scrollable || index < len(lines)-1
 	t.previewed.image = image
 	t.previewed.wireframe = wireframe
 }
@@ -4385,6 +4394,7 @@ func (t *Terminal) Loop() error {
 				var items []*Item
 				var commandTemplate string
 				var env []string
+				var query string
 				initialOffset := 0
 				t.previewBox.Wait(func(events *util.Events) {
 					for req, value := range *events {
@@ -4398,6 +4408,7 @@ func (t *Terminal) Loop() error {
 							initialOffset = request.scrollOffset
 							items = request.list
 							env = request.env
+							query = request.query
 						}
 					}
 					events.Clear()
@@ -4411,8 +4422,7 @@ func (t *Terminal) Loop() error {
 				version++
 				// We don't display preview window if no match
 				if items[0] != nil {
-					_, query := t.Input()
-					command, tempFiles := t.replacePlaceholder(commandTemplate, false, string(query), items)
+					command, tempFiles := t.replacePlaceholder(commandTemplate, false, query, items)
 					cmd := t.executor.ExecCommand(command, true)
 					cmd.Env = env
 
@@ -4540,7 +4550,7 @@ func (t *Terminal) Loop() error {
 		if len(command) > 0 && t.canPreview() {
 			_, list := t.buildPlusList(command, false)
 			t.cancelPreview()
-			t.previewBox.Set(reqPreviewEnqueue, previewRequest{command, t.evaluateScrollOffset(), list, t.environForPreview()})
+			t.previewBox.Set(reqPreviewEnqueue, previewRequest{command, t.evaluateScrollOffset(), list, t.environForPreview(), string(t.input)})
 		}
 	}
 
@@ -4972,7 +4982,7 @@ func (t *Terminal) Loop() error {
 						if valid {
 							t.cancelPreview()
 							t.previewBox.Set(reqPreviewEnqueue,
-								previewRequest{t.previewOpts.command, t.evaluateScrollOffset(), list, t.environForPreview()})
+								previewRequest{t.previewOpts.command, t.evaluateScrollOffset(), list, t.environForPreview(), string(t.input)})
 						}
 					} else {
 						// Discard the preview content so that it won't accidentally appear

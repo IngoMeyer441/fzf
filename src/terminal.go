@@ -1347,7 +1347,7 @@ func (t *Terminal) numItemLines(item *Item, atMost int) (int, bool) {
 	}
 	if cached, prs := t.numLinesCache[item.Index()]; prs {
 		// Can we use this cache? Let's be conservative.
-		if cached.atMost >= atMost {
+		if cached.atMost <= atMost {
 			return cached.numLines, false
 		}
 	}
@@ -1575,9 +1575,7 @@ func (t *Terminal) output() bool {
 	}
 	if t.acceptNth != nil {
 		transform = func(item *Item) string {
-			tokens := Tokenize(item.AsString(t.ansi), t.delimiter)
-			transformed := t.acceptNth(tokens, item.Index())
-			return StripLastDelimiter(transformed, t.delimiter)
+			return item.acceptNth(t.ansi, t.delimiter, t.acceptNth)
 		}
 	}
 	found := len(t.selected) > 0
@@ -2288,7 +2286,11 @@ func (t *Terminal) move(y int, x int, clear bool) {
 }
 
 func (t *Terminal) truncateQuery() {
-	t.input, _ = t.trimRight(t.input, maxPatternLength)
+	// We're limiting the length of the query not to make fzf unresponsive when
+	// the user accidentally pastes a huge chunk of text. Therefore, we're not
+	// interested in the exact display width of the query. We just limit the
+	// number of runes.
+	t.input = t.input[:util.Min(len(t.input), maxPatternLength)]
 	t.cx = util.Constrain(t.cx, 0, len(t.input))
 }
 

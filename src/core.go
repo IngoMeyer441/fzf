@@ -135,6 +135,7 @@ func Run(opts *Options) (int, error) {
 				return false
 			}
 			item.text, item.colors = ansiProcessor(stringBytes(transformed))
+			item.text.TrimTrailingWhitespaces()
 			item.text.Index = itemIndex
 			item.origText = &data
 			itemIndex++
@@ -476,8 +477,17 @@ func Run(opts *Options) (int, error) {
 									if len(opts.Expect) > 0 {
 										opts.Printer("")
 									}
+									transformer := func(item *Item) string {
+										return item.AsString(opts.Ansi)
+									}
+									if opts.AcceptNth != nil {
+										fn := opts.AcceptNth(opts.Delimiter)
+										transformer = func(item *Item) string {
+											return item.acceptNth(opts.Ansi, opts.Delimiter, fn)
+										}
+									}
 									for i := 0; i < count; i++ {
-										opts.Printer(val.Get(i).item.AsString(opts.Ansi))
+										opts.Printer(transformer(val.Get(i).item))
 									}
 									if count == 0 {
 										exitCode = ExitNoMatch

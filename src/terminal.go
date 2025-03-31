@@ -38,7 +38,7 @@ As such it is not useful for validation, but rather to generate test
 cases for example.
 
 	\\?(?:                                      # escaped type
-	    {\+?s?f?RANGE(?:,RANGE)*}               # token type
+	    {\+?s?f?r?RANGE(?:,RANGE)*}             # token type
 	    {q[:s?RANGE]}                           # query type
 	    |{\+?n?f?}                              # item type (notice no mandatory element inside brackets)
 	)
@@ -65,7 +65,7 @@ const maxFocusEvents = 10000
 const blockDuration = 1 * time.Second
 
 func init() {
-	placeholder = regexp.MustCompile(`\\?(?:{[+sf]*[0-9,-.]*}|{q(?::s?[0-9,-.]+)?}|{fzf:(?:query|action|prompt)}|{\+?f?nf?})`)
+	placeholder = regexp.MustCompile(`\\?(?:{[+sfr]*[0-9,-.]*}|{q(?::s?[0-9,-.]+)?}|{fzf:(?:query|action|prompt)}|{\+?f?nf?})`)
 	whiteSuffix = regexp.MustCompile(`\s*$`)
 	offsetComponentRegex = regexp.MustCompile(`([+-][0-9]+)|(-?/[1-9][0-9]*)`)
 	offsetTrimCharsRegex = regexp.MustCompile(`[^0-9/+-]`)
@@ -475,15 +475,19 @@ const (
 	actBackwardWord
 	actCancel
 	actChangeBorderLabel
-	actChangeListLabel
-	actChangeInputLabel
+	actChangeGhost
 	actChangeHeader
 	actChangeHeaderLabel
+	actChangeInputLabel
+	actChangeListLabel
 	actChangeMulti
+	actChangeNth
+	actChangePointer
+	actChangePreview
 	actChangePreviewLabel
+	actChangePreviewWindow
 	actChangePrompt
 	actChangeQuery
-	actChangeNth
 	actClearScreen
 	actClearQuery
 	actClearSelection
@@ -542,19 +546,19 @@ const (
 	actTogglePreviewWrap
 	actTransform
 	actTransformBorderLabel
-	actTransformListLabel
-	actTransformInputLabel
+	actTransformGhost
 	actTransformHeader
 	actTransformHeaderLabel
+	actTransformInputLabel
+	actTransformListLabel
 	actTransformNth
+	actTransformPointer
 	actTransformPreviewLabel
 	actTransformPrompt
 	actTransformQuery
 	actTransformSearch
 	actSearch
 	actPreview
-	actChangePreview
-	actChangePreviewWindow
 	actPreviewTop
 	actPreviewBottom
 	actPreviewUp
@@ -624,6 +628,7 @@ type placeholderFlags struct {
 	number        bool
 	forceUpdate   bool
 	file          bool
+	raw           bool
 }
 
 type searchRequest struct {
@@ -1306,8 +1311,11 @@ func (t *Terminal) parsePrompt(prompt string) (func(), int) {
 		t.wrap = false
 		t.withWindow(t.inputWindow, func() {
 			line := t.promptLine()
+			preTask := func(markerClass) int {
+				return 1
+			}
 			t.printHighlighted(
-				Result{item: item}, tui.ColPrompt, tui.ColPrompt, false, false, line, line, true, nil, nil)
+				Result{item: item}, tui.ColPrompt, tui.ColPrompt, false, false, line, line, true, preTask, nil)
 		})
 		t.wrap = wrap
 	}
@@ -1415,10 +1423,7 @@ func (t *Terminal) Input() (bool, []rune) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	paused := t.paused
-	var src []rune
-	if !t.inputless {
-		src = t.input
-	}
+	src := t.input
 	if t.inputOverride != nil {
 		paused = false
 		src = *t.inputOverride
@@ -2341,15 +2346,18 @@ func (t *Terminal) placeCursor() {
 	if t.inputless {
 		return
 	}
+	x := t.promptLen + t.queryLen[0]
 	if t.inputWindow != nil {
 		y := t.inputWindow.Height() - 1
 		if t.layout == layoutReverse {
 			y = 0
 		}
-		t.inputWindow.Move(y, t.promptLen+t.queryLen[0])
+		x = util.Min(x, t.inputWindow.Width()-1)
+		t.inputWindow.Move(y, x)
 		return
 	}
-	t.move(t.promptLine(), t.promptLen+t.queryLen[0], false)
+	x = util.Min(x, t.window.Width()-1)
+	t.move(t.promptLine(), x, false)
 }
 
 func (t *Terminal) printPrompt() {
@@ -3775,6 +3783,8 @@ func parsePlaceholder(match string) (bool, string, placeholderFlags) {
 			flags.number = true
 		case 'f':
 			flags.file = true
+		case 'r':
+			flags.raw = true
 		case 'q':
 			flags.forceUpdate = true
 			trimmed += string(char)
@@ -3926,7 +3936,7 @@ func replacePlaceholder(params replacePlaceholderParams) (string, []string) {
 						return "''"
 					}
 					return strconv.Itoa(int(n))
-				case flags.file:
+				case flags.file || flags.raw:
 					return item.AsString(params.stripAnsi)
 				default:
 					return params.executor.QuoteEntry(item.AsString(params.stripAnsi))
@@ -3968,7 +3978,7 @@ func replacePlaceholder(params replacePlaceholderParams) (string, []string) {
 				if !flags.preserveSpace {
 					str = strings.TrimSpace(str)
 				}
-				if !flags.file {
+				if !flags.file && !flags.raw {
 					str = params.executor.QuoteEntry(str)
 				}
 				return str
@@ -4622,11 +4632,7 @@ func (t *Terminal) Loop() error {
 				//  U t.uiMutex                 |
 				t.uiMutex.Lock()
 				t.mutex.Lock()
-				printInfo := util.RunOnce(func() {
-					if !t.resizeIfNeeded() {
-						t.printInfo()
-					}
-				})
+				info := false
 				for _, key := range keys {
 					req := util.EventType(key)
 					value := (*events)[req]
@@ -4634,15 +4640,14 @@ func (t *Terminal) Loop() error {
 					case reqPrompt:
 						t.printPrompt()
 						if t.infoStyle == infoInline || t.infoStyle == infoInlineRight {
-							printInfo()
+							info = true
 						}
 					case reqInfo:
-						printInfo()
+						info = true
 					case reqList:
 						t.printList()
 						currentIndex := t.currentIndex()
 						focusChanged := focusedIndex != currentIndex
-						info := false
 						if focusChanged && focusedIndex >= 0 && t.track == trackCurrent {
 							t.track = trackDisabled
 							info = true
@@ -4653,9 +4658,6 @@ func (t *Terminal) Loop() error {
 							if t.infoCommand != "" {
 								info = true
 							}
-						}
-						if info {
-							printInfo()
 						}
 						if focusChanged || version != t.version {
 							version = t.version
@@ -4747,6 +4749,9 @@ func (t *Terminal) Loop() error {
 						exit(func() int { return ExitError })
 						return
 					}
+				}
+				if info && !t.resizeIfNeeded() {
+					t.printInfo()
 				}
 				t.flush()
 				t.mutex.Unlock()
@@ -4931,6 +4936,14 @@ func (t *Terminal) Loop() error {
 			return true
 		}
 		doAction = func(a *action) bool {
+			// Keep track of the current query before the action is executed,
+			// so we can restore it when the input section is hidden (--no-input).
+			// * By doing this, we don't have to add a conditional branch to each
+			//   query modifying action.
+			// * We restore the query after each action instead of after a set of
+			//   actions to allow changing the query even when the input is hidden
+			//     e.g. fzf --no-input --bind 'space:show-input+change-query(foo)+hide-input'
+			currentInput := t.input
 		Action:
 			switch a.t {
 			case actIgnore, actStart, actClick:
@@ -5125,7 +5138,12 @@ func (t *Terminal) Loop() error {
 					header = t.captureLines(a.a)
 				}
 				if t.changeHeader(header) {
-					req(reqHeader, reqList, reqPrompt, reqInfo)
+					if t.headerWindow != nil {
+						// Need to resize header window
+						req(reqFullRedraw)
+					} else {
+						req(reqHeader, reqList, reqPrompt, reqInfo)
+					}
 				} else {
 					req(reqHeader)
 				}
@@ -5861,7 +5879,7 @@ func (t *Terminal) Loop() error {
 
 				if me.Down {
 					mxCons := util.Constrain(mx-t.promptLen, 0, len(t.input))
-					if t.inputWindow == nil && my == t.promptLine() && mxCons >= 0 {
+					if !t.inputless && t.inputWindow == nil && my == t.promptLine() && mxCons >= 0 {
 						// Prompt
 						t.cx = mxCons + t.xoffset
 					} else if my >= min {
@@ -5945,6 +5963,30 @@ func (t *Terminal) Loop() error {
 						}
 					}
 				}
+			case actChangeGhost, actTransformGhost:
+				ghost := a.a
+				if a.t == actTransformGhost {
+					ghost = t.captureLine(a.a)
+				}
+				t.ghost = ghost
+				if len(t.input) == 0 {
+					req(reqPrompt)
+				}
+			case actChangePointer, actTransformPointer:
+				pointer := a.a
+				if a.t == actTransformPointer {
+					pointer = t.captureLine(a.a)
+				}
+				length := uniseg.StringWidth(pointer)
+				if length <= 2 {
+					if length != t.pointerLen {
+						t.forceRerenderList()
+					}
+					t.pointer = pointer
+					t.pointerLen = length
+					t.pointerEmpty = strings.Repeat(" ", t.pointerLen)
+					req(reqList)
+				}
 			case actChangePreview:
 				if t.previewOpts.command != a.a {
 					t.previewOpts.command = a.a
@@ -6022,6 +6064,15 @@ func (t *Terminal) Loop() error {
 			if !processExecution(a.t) {
 				t.lastAction = a.t
 			}
+
+			if t.inputless {
+				// Always just discard the change
+				t.input = currentInput
+				t.cx = len(t.input)
+				beof = false
+			} else if string(t.input) != string(currentInput) {
+				t.inputOverride = nil
+			}
 			return true
 		}
 
@@ -6042,18 +6093,10 @@ func (t *Terminal) Loop() error {
 			} else if !doActions(actions) {
 				continue
 			}
-			if t.inputless {
-				// Always just discard the change
-				t.input = previousInput
-				t.cx = len(t.input)
-				beof = false
-			} else {
+			if !t.inputless {
 				t.truncateQuery()
 			}
 			queryChanged = queryChanged || t.pasting == nil && string(previousInput) != string(t.input)
-			if queryChanged {
-				t.inputOverride = nil
-			}
 			changed = changed || queryChanged
 			if onChanges, prs := t.keymap[tui.Change.AsEvent()]; queryChanged && prs && !doActions(onChanges) {
 				continue

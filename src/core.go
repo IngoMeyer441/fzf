@@ -39,7 +39,7 @@ func (r revision) compatible(other revision) bool {
 // Run starts fzf
 func Run(opts *Options) (int, error) {
 	if opts.Filter == nil {
-		if opts.Tmux != nil && len(os.Getenv("TMUX")) > 0 && len(os.Getenv("TMUX_PANE")) > 0 && opts.Tmux.index >= opts.Height.index {
+		if opts.Tmux != nil && len(os.Getenv("TMUX")) > 0 && opts.Tmux.index >= opts.Height.index {
 			return runTmux(os.Args, opts)
 		}
 
@@ -295,6 +295,7 @@ func Run(opts *Options) (int, error) {
 	// Event coordination
 	reading := true
 	ticks := 0
+	startTick := 0
 	var nextCommand *commandSpec
 	var nextEnviron []string
 	eventBox.Watch(EvtReadNew)
@@ -321,6 +322,7 @@ func Run(opts *Options) (int, error) {
 			clearDenylist()
 		}
 		reading = true
+		startTick = ticks
 		chunkList.Clear()
 		itemIndex = 0
 		inputRevision.bumpMajor()
@@ -509,7 +511,7 @@ func Run(opts *Options) (int, error) {
 		}
 		if delay && reading {
 			dur := util.DurWithin(
-				time.Duration(ticks)*coordinatorDelayStep,
+				time.Duration(ticks-startTick)*coordinatorDelayStep,
 				0, coordinatorDelayMax)
 			time.Sleep(dur)
 		}

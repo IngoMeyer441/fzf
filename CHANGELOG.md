@@ -1,6 +1,33 @@
 CHANGELOG
 =========
 
+0.66.0
+------
+- Style changes
+    - Updated `--color base16` (alias: `16`) theme so that it works better with both dark and light themes.
+    - Narrowed the gutter column by using the left-half block character (`▌`).
+    - Removed background colors from markers.
+- Added `--gutter CHAR` option for customizing the gutter column. Some examples using [box-drawing characters](https://en.wikipedia.org/wiki/Box-drawing_characters):
+  ```sh
+  # Right-aligned gutter
+  fzf --gutter '▐'
+
+  # Even thinner gutter
+  fzf --gutter '▎'
+
+  # Checker
+  fzf --gutter '▚'
+
+  # Dotted
+  fzf --gutter '▖'
+
+  # Full-width
+  fzf --gutter '█'
+
+  # No gutter
+  fzf --gutter ' '
+  ```
+
 0.65.2
 ------
 - Bug fixes and improvements

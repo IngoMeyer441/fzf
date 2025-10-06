@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"net"
 	"os"
@@ -950,10 +951,7 @@ func NewTerminal(opts *Options, eventBox *util.EventBox, executor *util.Executor
 		wordRubout = fmt.Sprintf("%s[^%s]", sep, sep)
 		wordNext = fmt.Sprintf("[^%s]%s|(.$)", sep, sep)
 	}
-	keymapCopy := make(map[tui.Event][]*action)
-	for key, action := range opts.Keymap {
-		keymapCopy[key] = action
-	}
+	keymapCopy := maps.Clone(opts.Keymap)
 
 	t := Terminal{
 		initDelay:          delay,
@@ -2397,6 +2395,13 @@ func (t *Terminal) resizeWindows(forcePreview bool, redrawBorder bool) {
 			innerMarginInt[3],
 			innerWidth,
 			innerHeight-shrink, tui.WindowList, noBorder, true)
+	}
+
+	if len(t.scrollbar) == 0 {
+		for y := 0; y < t.window.Height(); y++ {
+			t.window.Move(y, t.window.Width()-1)
+			t.window.Print(" ")
+		}
 	}
 
 	createInnerWindow := func(b tui.Window, shape tui.BorderShape, windowType tui.WindowType, shift int) tui.Window {

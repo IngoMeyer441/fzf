@@ -7,6 +7,7 @@
 # - $FZF_TMUX_OPTS
 # - $FZF_CTRL_T_COMMAND
 # - $FZF_CTRL_T_OPTS
+# - $FZF_CTRL_R_COMMAND
 # - $FZF_CTRL_R_OPTS
 # - $FZF_ALT_C_COMMAND
 # - $FZF_ALT_C_OPTS
@@ -132,11 +133,11 @@ fzf-history-widget() {
   if zmodload -F zsh/parameter p:{commands,history} 2>/dev/null && (( ${+commands[perl]} )); then
     selected="$(printf '%s\t%s\000' "${(kv)history[@]}" |
       perl -0 -ne 'if (!$seen{(/^\s*[0-9]+\**\t(.*)/s, $1)}++) { s/\n/\n\t/g; print; }' |
-      FZF_DEFAULT_OPTS=$(__fzf_defaults "" "-n2..,.. --scheme=history --bind=ctrl-r:toggle-sort --wrap-sign '\t↳ ' --highlight-line ${FZF_CTRL_R_OPTS-} --query=${(qqq)LBUFFER} +m --read0") \
+      FZF_DEFAULT_OPTS=$(__fzf_defaults "" "-n2..,.. --scheme=history --bind=ctrl-r:toggle-sort,alt-r:toggle-raw --wrap-sign '\t↳ ' --highlight-line ${FZF_CTRL_R_OPTS-} --query=${(qqq)LBUFFER} +m --read0") \
       FZF_DEFAULT_OPTS_FILE='' $(__fzfcmd))"
   else
     selected="$(fc -rl 1 | __fzf_exec_awk '{ cmd=$0; sub(/^[ \t]*[0-9]+\**[ \t]+/, "", cmd); if (!seen[cmd]++) print $0 }' |
-      FZF_DEFAULT_OPTS=$(__fzf_defaults "" "-n2..,.. --scheme=history --bind=ctrl-r:toggle-sort --wrap-sign '\t↳ ' --highlight-line ${FZF_CTRL_R_OPTS-} --query=${(qqq)LBUFFER} +m") \
+      FZF_DEFAULT_OPTS=$(__fzf_defaults "" "-n2..,.. --scheme=history --bind=ctrl-r:toggle-sort,alt-r:toggle-raw --wrap-sign '\t↳ ' --highlight-line ${FZF_CTRL_R_OPTS-} --query=${(qqq)LBUFFER} +m") \
       FZF_DEFAULT_OPTS_FILE='' $(__fzfcmd))"
   fi
   local ret=$?
@@ -150,10 +151,15 @@ fzf-history-widget() {
   zle reset-prompt
   return $ret
 }
-zle     -N            fzf-history-widget
-bindkey -M emacs '^R' fzf-history-widget
-bindkey -M vicmd '^R' fzf-history-widget
-bindkey -M viins '^R' fzf-history-widget
+if [[ ${FZF_CTRL_R_COMMAND-x} != "" ]]; then
+  if [[ -n ${FZF_CTRL_R_COMMAND-} ]]; then
+    echo "warning: FZF_CTRL_R_COMMAND is set to a custom command, but custom commands are not yet supported for CTRL-R" >&2
+  fi
+  zle     -N            fzf-history-widget
+  bindkey -M emacs '^R' fzf-history-widget
+  bindkey -M vicmd '^R' fzf-history-widget
+  bindkey -M viins '^R' fzf-history-widget
+fi
 fi
 
 } always {

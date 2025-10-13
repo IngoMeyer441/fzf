@@ -7,6 +7,7 @@
 # - $FZF_TMUX_OPTS
 # - $FZF_CTRL_T_COMMAND
 # - $FZF_CTRL_T_OPTS
+# - $FZF_CTRL_R_COMMAND
 # - $FZF_CTRL_R_OPTS
 # - $FZF_ALT_C_COMMAND
 # - $FZF_ALT_C_OPTS
@@ -81,7 +82,7 @@ if command -v perl > /dev/null; then
       set +o pipefail
       builtin fc -lnr -2147483648 |
         last_hist=$(HISTTIMEFORMAT='' builtin history 1) command perl -n -l0 -e "$script" |
-        FZF_DEFAULT_OPTS=$(__fzf_defaults "" "-n2..,.. --scheme=history --bind=ctrl-r:toggle-sort --wrap-sign '"$'\t'"↳ ' --highlight-line ${FZF_CTRL_R_OPTS-} +m --read0") \
+        FZF_DEFAULT_OPTS=$(__fzf_defaults "" "-n2..,.. --scheme=history --bind=ctrl-r:toggle-sort,alt-r:toggle-raw --wrap-sign '"$'\t'"↳ ' --highlight-line ${FZF_CTRL_R_OPTS-} +m --read0") \
         FZF_DEFAULT_OPTS_FILE='' $(__fzfcmd) --query "$READLINE_LINE"
     ) || return
     READLINE_LINE=$(command perl -pe 's/^\d*\t//' <<< "$output")
@@ -104,7 +105,7 @@ else # awk - fallback for POSIX systems
       set +o pipefail
       builtin fc -lnr -2147483648 2> /dev/null | # ( $'\t '<lines>$'\n' )* ; <lines> ::= [^\n]* ( $'\n'<lines> )*
         __fzf_exec_awk "$script" |               # ( <counter>$'\t'<lines>$'\000' )*
-        FZF_DEFAULT_OPTS=$(__fzf_defaults "" "-n2..,.. --scheme=history --bind=ctrl-r:toggle-sort --wrap-sign '"$'\t'"↳ ' --highlight-line ${FZF_CTRL_R_OPTS-} +m --read0") \
+        FZF_DEFAULT_OPTS=$(__fzf_defaults "" "-n2..,.. --scheme=history --bind=ctrl-r:toggle-sort,alt-r:toggle-raw --wrap-sign '"$'\t'"↳ ' --highlight-line ${FZF_CTRL_R_OPTS-} +m --read0") \
         FZF_DEFAULT_OPTS_FILE='' $(__fzfcmd) --query "$READLINE_LINE"
     ) || return
     READLINE_LINE=${output#*$'\t'}
@@ -132,9 +133,14 @@ if ((BASH_VERSINFO[0] < 4)); then
   fi
 
   # CTRL-R - Paste the selected command from history into the command line
-  bind -m emacs-standard '"\C-r": "\C-e \C-u\C-y\ey\C-u`__fzf_history__`\e\C-e\er"'
-  bind -m vi-command '"\C-r": "\C-z\C-r\C-z"'
-  bind -m vi-insert '"\C-r": "\C-z\C-r\C-z"'
+  if [[ ${FZF_CTRL_R_COMMAND-x} != "" ]]; then
+    if [[ -n ${FZF_CTRL_R_COMMAND-} ]]; then
+      echo "warning: FZF_CTRL_R_COMMAND is set to a custom command, but custom commands are not yet supported for CTRL-R" >&2
+    fi
+    bind -m emacs-standard '"\C-r": "\C-e \C-u\C-y\ey\C-u`__fzf_history__`\e\C-e\er"'
+    bind -m vi-command '"\C-r": "\C-z\C-r\C-z"'
+    bind -m vi-insert '"\C-r": "\C-z\C-r\C-z"'
+  fi
 else
   # CTRL-T - Paste the selected file path into the command line
   if [[ ${FZF_CTRL_T_COMMAND-x} != "" ]]; then
@@ -144,9 +150,14 @@ else
   fi
 
   # CTRL-R - Paste the selected command from history into the command line
-  bind -m emacs-standard -x '"\C-r": __fzf_history__'
-  bind -m vi-command -x '"\C-r": __fzf_history__'
-  bind -m vi-insert -x '"\C-r": __fzf_history__'
+  if [[ ${FZF_CTRL_R_COMMAND-x} != "" ]]; then
+    if [[ -n ${FZF_CTRL_R_COMMAND-} ]]; then
+      echo "warning: FZF_CTRL_R_COMMAND is set to a custom command, but custom commands are not yet supported for CTRL-R" >&2
+    fi
+    bind -m emacs-standard -x '"\C-r": __fzf_history__'
+    bind -m vi-command -x '"\C-r": __fzf_history__'
+    bind -m vi-insert -x '"\C-r": __fzf_history__'
+  fi
 fi
 
 # ALT-C - cd into the selected directory

@@ -1,13 +1,60 @@
 CHANGELOG
 =========
 
-0.69.0
+0.70.1
 ------
-- Added `change-with-nth` action for dynamically changing the `--with-nth` option
+- Performance improvements
+    - The search performance now scales linearly with the number of CPU cores, as we dropped static partitioning to allow better load balancing across threads.
+      ```
+      === query: 'linux' ===
+        [all]   baseline:    17.12ms  current:    14.28ms  (1.20x)  matches: 179966 (12.79%)
+        [1T]    baseline:   136.49ms  current:   137.25ms  (0.99x)  matches: 179966 (12.79%)
+        [2T]    baseline:    75.74ms  current:    68.75ms  (1.10x)  matches: 179966 (12.79%)
+        [4T]    baseline:    41.16ms  current:    34.97ms  (1.18x)  matches: 179966 (12.79%)
+        [8T]    baseline:    32.82ms  current:    17.79ms  (1.84x)  matches: 179966 (12.79%)
+      ```
+    - Improved the cache structure, reducing memory footprint per entry by 86x.
+        - With the reduced per-entry cost, the cache now has broader coverage.
+- fish: Improved command history (CTRL-R) (#44703) (@bitraid)
+- Bug fixes
+    - Fixed AWK tokenizer not treating a new line character as whitespace
+    - Fixed `--{accept,with}-nth` removing trailing whitespaces with a non-default `--delimiter`
+    - Fixed OSC8 hyperlinks being mangled when the URL contains unicode characters (#4707)
+
+0.70.0
+------
+- Added `change-with-nth` action for dynamically changing the `--with-nth` option.
+    - Requires `--with-nth` to be set initially.
+    - Multiple options separated by `|` can be given to cycle through.
   ```sh
   echo -e "a b c\nd e f\ng h i" | fzf --with-nth .. \
     --bind 'space:change-with-nth(1|2|3|1,3|2,3|)'
   ```
+- Added `change-header-lines` action for dynamically changing the `--header-lines` option
+- Performance improvements (1.3x to 1.9x faster filtering depending on query)
+  ```
+  === query: 'l' ===
+    [all]   baseline:   168.87ms  current:    95.21ms  (1.77x)  matches: 5069891 (94.78%)
+    [1T]    baseline:  1652.22ms  current:   841.40ms  (1.96x)  matches: 5069891 (94.78%)
+
+  === query: 'lin' ===
+    [all]   baseline:   343.27ms  current:   252.59ms  (1.36x)  matches: 3516507 (65.74%)
+    [1T]    baseline:  3199.89ms  current:  2230.64ms  (1.43x)  matches: 3516507 (65.74%)
+
+  === query: 'linux' ===
+    [all]   baseline:    85.47ms  current:    63.72ms  (1.34x)  matches: 307229 (5.74%)
+    [1T]    baseline:   774.64ms  current:   589.32ms  (1.31x)  matches: 307229 (5.74%)
+
+  === query: 'linuxlinux' ===
+    [all]   baseline:    55.13ms  current:    35.67ms  (1.55x)  matches: 12230 (0.23%)
+    [1T]    baseline:   461.99ms  current:   332.38ms  (1.39x)  matches: 12230 (0.23%)
+
+  === query: 'linuxlinuxlinux' ===
+    [all]   baseline:    51.77ms  current:    32.53ms  (1.59x)  matches: 865 (0.02%)
+    [1T]    baseline:   409.99ms  current:   296.33ms  (1.38x)  matches: 865 (0.02%)
+  ```
+- Fixed `nth` attribute merge order to respect precedence hierarchy (#4697)
+- bash: Replaced `printf` with builtin `printf` to bypass local indirections (#4684) (@DarrenBishop)
 
 0.68.0
 ------

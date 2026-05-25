@@ -1407,13 +1407,13 @@ class TestCore < TestInteractive
         --bind 'every(0.1):execute-silent(printf . >> #{fast})' \\
         --bind 'every(0.5):execute-silent(printf . >> #{slow})'), :Enter
     tmux.until { |lines| assert_equal 100, lines.match_count }
-    sleep 1.2
+    sleep(1.2)
     a = File.exist?(fast) ? File.size(fast) : 0
     b = File.exist?(slow) ? File.size(slow) : 0
     # Sanity: faster timer fired more times.
-    assert a > b, "fast timer should fire more (#{a} vs #{b})"
+    assert_operator a, :>, b, "fast timer should fire more (#{a} vs #{b})"
     # Sanity: slow timer fired at least once.
-    assert b >= 1, "slow timer should have fired at least once (#{b})"
+    assert_operator b, :>=, 1, "slow timer should have fired at least once (#{b})"
   ensure
     FileUtils.rm_f(fast)
     FileUtils.rm_f(slow)
@@ -1426,7 +1426,7 @@ class TestCore < TestInteractive
     tmux.until { |lines| assert_match(/^  \d{2}\.\d+/, lines[-3]) }
     tmux.send_keys :Space
     tmux.until { |lines| assert_includes lines[-3], 'STOPPED' }
-    sleep 0.4
+    sleep(0.4)
     # Header must stay STOPPED after the unbind
     assert_includes tmux.capture[-3], 'STOPPED'
   end
@@ -1462,7 +1462,7 @@ class TestCore < TestInteractive
     tmux.send_keys 'x'
     tmux.until { |lines| assert_includes lines[-1], '[x]>' }
     # every() ticks shouldn't overwrite FZF_KEY
-    sleep 1
+    sleep(1)
     assert_includes tmux.capture[-1], '[x]>'
   end
 
@@ -2153,6 +2153,24 @@ class TestCore < TestInteractive
     tmux.until { |lines| assert lines.any_include?('a b c') || lines.any_include?('d e f') }
   end
 
+  # Regression: actions emitted by bg-transform must affect the iteration that
+  # processes the async result, not the (no-longer-active) iteration that
+  # scheduled the transform. Covers reload (newCommand) and exclude (denylist).
+  def test_bg_transform_action_output
+    tmux.send_keys %(seq 5 | #{FZF} --bind 'a:bg-transform(echo reload:seq 10 20),b:bg-transform(echo exclude)'), :Enter
+    tmux.until { |lines| assert_equal 5, lines.item_count }
+    tmux.send_keys :a
+    tmux.until do |lines|
+      assert_equal 11, lines.match_count
+      assert_includes lines, '> 10'
+    end
+    tmux.send_keys :b
+    tmux.until do |lines|
+      assert_equal 10, lines.match_count
+      assert_includes lines, '> 11'
+    end
+  end
+
   def test_change_with_nth_search
     input = [
       'alpha bravo charlie',
@@ -2268,6 +2286,7 @@ class TestCore < TestInteractive
       FZF_ACTION: 'start',
       FZF_KEY: '',
       FZF_POS: '1',
+      FZF_CURRENT_ITEM: '1',
       FZF_QUERY: '',
       FZF_POINTER: '>',
       FZF_PROMPT: '> ',
@@ -2283,12 +2302,12 @@ class TestCore < TestInteractive
     end
     tmux.send_keys :Tab, :Tab
     tmux.until do
-      expected.merge!(FZF_ACTION: 'toggle-down', FZF_KEY: 'tab', FZF_POS: '3', FZF_SELECT_COUNT: '2')
+      expected.merge!(FZF_ACTION: 'toggle-down', FZF_KEY: 'tab', FZF_POS: '3', FZF_CURRENT_ITEM: '3', FZF_SELECT_COUNT: '2')
       assert_equal expected, env_vars.slice(*expected.keys)
     end
     tmux.send_keys '99'
     tmux.until do
-      expected.merge!(FZF_ACTION: 'char', FZF_KEY: '9', FZF_QUERY: '99', FZF_MATCH_COUNT: '1', FZF_POS: '1')
+      expected.merge!(FZF_ACTION: 'char', FZF_KEY: '9', FZF_QUERY: '99', FZF_MATCH_COUNT: '1', FZF_POS: '1', FZF_CURRENT_ITEM: '99')
       assert_equal expected, env_vars.slice(*expected.keys)
     end
     tmux.send_keys :Space

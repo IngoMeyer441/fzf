@@ -6187,6 +6187,7 @@ func (t *Terminal) Loop() error {
 			for {
 				select {
 				case <-ctx.Done():
+					signal.Stop(intChan)
 					return
 				case s := <-intChan:
 					// Don't quit by SIGINT while executing because it should be for the executing command and not for fzf itself
@@ -6199,7 +6200,7 @@ func (t *Terminal) Loop() error {
 
 		if !t.tui.ShouldEmitResizeEvent() {
 			resizeChan := make(chan os.Signal, 1)
-			notifyOnResize(resizeChan) // Non-portable
+			notifyOnResize(ctx, resizeChan) // Non-portable
 			go func() {
 				for {
 					select {

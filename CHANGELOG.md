@@ -5,8 +5,31 @@ CHANGELOG
 ------
 - Fixed `--with-shell` on Windows not detecting cmd, PowerShell, and pwsh, which made fzf quote commands and entries for a POSIX shell (#4936) (@vimkim)
     - e.g. With `--with-shell "cmd.exe /d /c"`, `--preview '"C:\Program Files\nu\bin\nu.exe" --version'` failed
+- `transform-nth` and `transform-with-nth` (and their `bg-` variants) no longer split the output at `|`
+    - Only `change-nth` and `change-with-nth` rotate through `|`-separated values
+    - Fixed the bound command being replaced with the output. e.g. With `transform-nth(echo '1|2')`, the next key press ran `2|1` as a shell command.
+    - A `--with-nth` template in the output can now contain `|`. e.g. `{2}|{1}` was cut to `{2}`.
+- `change-nth` and `transform-nth` now handle empty and invalid values the same way as `change-with-nth` and `transform-with-nth`
+    - An empty value restores the default `--nth`. Previously, `change-nth()` and an empty `transform-nth` output searched all fields. Use `change-nth(..)` for that.
+    - A non-empty invalid value is ignored. Previously, it restored the default `--nth`.
+- `change-nth` and `change-with-nth` now apply the value after the current one in the `|`-separated list
+    - A value equal to the current one is skipped, e.g. the first value when it is the initial `--nth`
+    - Invalid values in the list are skipped
+    - The rotation follows the current value even when another binding changed it, or when the action is printed by `transform` (unless the list contains the same value more than once)
+    - You can list the values in their natural order, starting with the initial one
+      ```sh
+      # Previously, you would have to write:
+      ls -al | fzf --with-nth .. --bind 'space:change-with-nth:1|2|..'
+
+      # Now you can write:
+      ls -al | fzf --with-nth .. --bind 'space:change-with-nth:..|1|2'
+      ```
 - nushell
     - The completion integration now requires nushell 0.116.1 or above, where an interactive completer can take the terminal through the `@interactive` attribute (#4934) (@sim590)
+- Fixed `--no-sort` being ignored in filter mode with `--sync`, `--tac`, or `--bench` (#4940) (@NavpreetSSidhu)
+- Vim plugin: Fixed garbage text on screen in Neovim with `set title` when the fzf command contains ANSI escape sequences (#4941)
+- Fixed `--walker=follow` skipping a symlink in one `--walker-root` when its target is an ancestor of another root (#4944) (@mabunemeh)
+- Fixed O(n^2) action parsing in `--listen`. A single ~1 MB request could block the server for ~30 s (@zachariah-mithani, AploSec)
 
 0.74.5
 ------
